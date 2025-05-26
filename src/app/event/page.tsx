@@ -8,6 +8,7 @@ import { provinceNameMap, provinceToRegion } from "@/app/lib/provinceRegions";
 import { ArrowLeft } from "lucide-react";
 
 interface EventData {
+   id: string;
   name: string;
   description: string;
   date: string;
@@ -17,7 +18,7 @@ interface EventData {
 }
 
 const regions = [
-  "ทั้งหมด",
+  "ภาคทั้งหมด",
   "ภาคเหนือ",
   "ภาคตะวันออกเฉียงเหนือ",
   "ภาคกลาง",
@@ -242,9 +243,7 @@ export default function EventPage() {
                       <div className="text-right">
                         <button
                           onClick={() =>
-                            router.push(
-                              `/eventdetail/${encodeURIComponent(event.name)}`
-                            )
+                            router.push(`/eventdetail/${encodeURIComponent(event.id)}`)
                           }
                           className="text-[#5D5A88] text-sm font-medium hover:underline"
                         >
@@ -296,9 +295,7 @@ export default function EventPage() {
                     <div className="flex justify-end mt-4">
                       <button
                         onClick={() =>
-                          router.push(
-                            `/eventdetail/${encodeURIComponent(event.name)}`
-                          )
+                          router.push(`/eventdetail/${encodeURIComponent(event.id)}`)
                         }
                         className="text-[#5D5A88] font-semibold hover:underline"
                       >

@@ -1,4 +1,3 @@
-// ✅ api/prEventForm/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 import { provinceToRegion } from "@/app/lib/provinceRegions";
@@ -15,24 +14,22 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-  const party = req.nextUrl.searchParams.get("party");
+  const partyId = req.nextUrl.searchParams.get("party");
   const policy = req.nextUrl.searchParams.get("policy");
 
   const session = driver.session();
   try {
-    if (party) {
-      // ✅ กรณีดึงนโยบายของพรรค
+    if (partyId) {
       const result = await session.run(
         `
-        MATCH (p:Party {name: $party})<-[:BELONGS_TO]-(policy:Policy)
+        MATCH (p:Party {id: toInteger($partyId)})<-[:BELONGS_TO]-(policy:Policy)
         RETURN policy.name AS name
         `,
-        { party }
+        { partyId: parseInt(partyId) }
       );
       const policies = result.records.map((r) => r.get("name"));
       return NextResponse.json({ policies });
     } else if (policy) {
-      // ✅ กรณีดึงโครงการที่อยู่ในนโยบายนั้น
       const result = await session.run(
         `
         MATCH (c:Campaign)-[:PART_OF]->(:Policy {name: $policy})
@@ -56,15 +53,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-
-
 export async function POST(req: NextRequest) {
-  const { name, description, date, time, location, map, policy, party, province, campaign, status } = await req.json();
+  const { name, description, date, time, location, map, policy, partyId, province, campaign, status } = await req.json();
   const region = provinceToRegion[province];
   if (!region) {
     return NextResponse.json({ error: "ไม่พบภาคของจังหวัดนี้" }, { status: 400 });
   }
-
 
   const session = driver.session();
 
@@ -74,58 +68,74 @@ export async function POST(req: NextRequest) {
       { name }
     );
     if (check.records.length > 0) {
-      console.log("❌ Event name ซ้ำ:", name);
       return NextResponse.json({ error: "มีชื่อกิจกรรมนี้อยู่แล้ว กรุณาใช้ชื่ออื่น" }, { status: 400 });
     }
+
+    const maxIdResult = await session.run(`MATCH (e:Event) RETURN MAX(e.id) AS maxId`);
+    const maxIdRecord = maxIdResult.records[0];
+    const nextId = (maxIdRecord?.get("maxId")?.toNumber?.() || 0) + 1;
+
     const result = await session.run(
       `
-        CREATE (e:Event {
-  name: $name,
-  id: toInteger(timestamp()),
-  description: $description,
-  date: $date,
-  time: $time,
-  location: $location,
-  map: $map,
-  status: $status
-})
+      CREATE (e:Event {
+        id: toInteger($id),
+        name: $name,
+        description: $description,
+        date: $date,
+        time: $time,
+        location: $location,
+        map: $map,
+        status: $status
+      })
+      MERGE (prov:Province {name: $province})
+      MERGE (reg:Region {name: $region})
+      MERGE (prov)-[:IN_REGION]->(reg)
+      MERGE (e)-[:LOCATED_IN]->(prov)
 
-  MERGE (prov:Province {name: $province})
-  MERGE (reg:Region {name: $region})
-  MERGE (prov)-[:IN_REGION]->(reg)
-  MERGE (e)-[:LOCATED_IN]->(prov)
+      WITH e
+      OPTIONAL MATCH (p:Policy {name: $policy})
+      OPTIONAL MATCH (pt:Party {id: toInteger($partyId)})
+      OPTIONAL MATCH (c:Campaign {name: $campaign})
 
-  WITH e
-  OPTIONAL MATCH (p:Policy {name: $policy})
-  OPTIONAL MATCH (pt:Party {name: $party})
-  OPTIONAL MATCH (c:Campaign {name: $campaign})
+      FOREACH (_ IN CASE WHEN p IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (e)-[:RELATED_POLICY]->(p)
+      )
 
-  FOREACH (_ IN CASE WHEN p IS NOT NULL THEN [1] ELSE [] END |
-    MERGE (e)-[:RELATED_POLICY]->(p)
-  )
+      FOREACH (_ IN CASE WHEN pt IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (e)-[:ORGANIZED_BY]->(pt)
+      )
 
-  FOREACH (_ IN CASE WHEN pt IS NOT NULL THEN [1] ELSE [] END |
-    MERGE (e)-[:ORGANIZED_BY]->(pt)
-  )
-
-  FOREACH (_ IN CASE WHEN c IS NOT NULL THEN [1] ELSE [] END |
+      FOREACH (_ IN CASE WHEN c IS NOT NULL THEN [1] ELSE [] END |
         MERGE (e)-[:UNDER_CAMPAIGN]->(c)
       )
 
-  RETURN e.name AS name, e.id AS id
-  `,
-      { name, description, date, time, location, map, policy, party, province, campaign, region, status }
+      RETURN e.name AS name, e.id AS id
+      `,
+      {
+        id: nextId,
+        name,
+        description,
+        date,
+        time,
+        location,
+        map,
+        policy,
+        partyId,
+        province,
+        campaign,
+        region,
+        status,
+      }
     );
 
-    console.log("🎯 Result from CREATE query:", result);
+    const record = result.records[0];
+    if (!record) {
+      return NextResponse.json({ error: "สร้างกิจกรรมไม่สำเร็จ: ไม่พบ ID" }, { status: 500 });
+    }
+    const rawId = record.get("id");
+const newEventId = typeof rawId?.toNumber === "function" ? rawId.toNumber() : rawId;
 
-const record = result.records[0];
-if (!record) {
-  return NextResponse.json({ error: "สร้างกิจกรรมไม่สำเร็จ: ไม่พบ ID" }, { status: 500 });
-}
-const newEventId = record.get("id").toNumber();
-return NextResponse.json({ message: "สร้างกิจกรรมสำเร็จ", id: newEventId });
-
+    return NextResponse.json({ message: "สร้างกิจกรรมสำเร็จ", id: newEventId });
   } catch (err) {
     console.error("Neo4j error:", err);
     return new NextResponse(JSON.stringify({ error: "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์" }), {
@@ -140,67 +150,66 @@ return NextResponse.json({ message: "สร้างกิจกรรมสำ�
 export async function PUT(req: NextRequest) {
   const {
     id, name, description, date, time, location,
-    map, province, policy, party, campaign, status
+    map, province, policy, partyId, campaign, status
   } = await req.json();
 
   const session = driver.session();
   try {
-   await session.run(
-  `
-  MATCH (e:Event {id: toInteger($id)})
-  SET e.name = $name,
-      e.description = $description,
-      e.date = $date,
-      e.time = $time,
-      e.location = $location,
-      e.map = $map,
-      e.status = $status
-  `,
-  { id, name, description, date, time, location, map, status }
-);
+    await session.run(
+      `
+      MATCH (e:Event {id: toInteger($id)})
+      SET e.name = $name,
+          e.description = $description,
+          e.date = $date,
+          e.time = $time,
+          e.location = $location,
+          e.map = $map,
+          e.status = $status
+      `,
+      { id, name, description, date, time, location, map, status }
+    );
 
-// 🔥 ลบความสัมพันธ์เดิม
-await session.run(
-  `
-  MATCH (e:Event {id: toInteger($id)})
-  OPTIONAL MATCH (e)-[r1:RELATED_POLICY]->()
-  OPTIONAL MATCH (e)-[r2:UNDER_CAMPAIGN]->()
-  OPTIONAL MATCH (e)-[r3:LOCATED_IN]->()
-  DELETE r1, r2, r3
-  `,
-  { id }
-);
+    await session.run(
+      `
+      MATCH (e:Event {id: toInteger($id)})
+      OPTIONAL MATCH (e)-[r1:RELATED_POLICY]->()
+      OPTIONAL MATCH (e)-[r2:UNDER_CAMPAIGN]->()
+      OPTIONAL MATCH (e)-[r3:LOCATED_IN]->()
+      DELETE r1, r2, r3
+      `,
+      { id }
+    );
 
-// ✅ เชื่อมความสัมพันธ์ใหม่
-if (policy) {
-  await session.run(
-    `
-    MATCH (e:Event {id: toInteger($id)}), (p:Policy {name: $policy})
-    CREATE (e)-[:RELATED_POLICY]->(p)
-    `,
-    { id, policy }
-  );
-}
-if (campaign && campaign.trim() !== "") {
-  await session.run(
-    `
-    MATCH (e:Event {id: toInteger($id)}), (c:Campaign {name: $campaign})
-    MERGE (e)-[:UNDER_CAMPAIGN]->(c)
-    `,
-    { id, campaign }
-  );
-}
-if (province) {
-  await session.run(
-    `
-    MATCH (e:Event {id: toInteger($id)})
-MERGE (prov:Province {name: $province})
-MERGE (e)-[:LOCATED_IN]->(prov)
+    if (policy) {
+      await session.run(
+        `
+        MATCH (e:Event {id: toInteger($id)}), (p:Policy {name: $policy})
+        MERGE (e)-[:RELATED_POLICY]->(p)
+        `,
+        { id, policy }
+      );
+    }
 
-    `,
-    { id, province }
-  );
-}
+    if (campaign && campaign.trim() !== "") {
+      await session.run(
+        `
+        MATCH (e:Event {id: toInteger($id)}), (c:Campaign {name: $campaign})
+        MERGE (e)-[:UNDER_CAMPAIGN]->(c)
+        `,
+        { id, campaign }
+      );
+    }
+
+    if (province) {
+      await session.run(
+        `
+        MATCH (e:Event {id: toInteger($id)})
+        MERGE (prov:Province {name: $province})
+        MERGE (e)-[:LOCATED_IN]->(prov)
+        `,
+        { id, province }
+      );
+    }
 
     return NextResponse.json({ message: "แก้ไขกิจกรรมสำเร็จ" });
   } catch (err) {
@@ -210,4 +219,3 @@ MERGE (e)-[:LOCATED_IN]->(prov)
     await session.close();
   }
 }
-

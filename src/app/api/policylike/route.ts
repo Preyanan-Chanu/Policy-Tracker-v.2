@@ -4,22 +4,22 @@ import { NextResponse } from 'next/server';
 import neo4j, { int, isInt } from 'neo4j-driver';
 import driver from '@/app/lib/neo4j';
 
-// GET /api/policylike?name=...
+// ✅ GET /api/policylike?id=41
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const name = url.searchParams.get('name');
-  if (!name) {
-    return NextResponse.json({ error: 'Missing policy name' }, { status: 400 });
+  const id = url.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'Missing policy id' }, { status: 400 });
   }
 
   const session = driver.session();
   try {
     const result = await session.run(
       `
-        MATCH (p:Policy { name: $name })
+        MATCH (p:Policy { id: $pid })
         RETURN p.like AS like
       `,
-      { name }
+      { pid: neo4j.int(parseInt(id)) }
     );
 
     let likeCount = 0;
@@ -36,11 +36,11 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/policylike  { name: string, action: 'increment' | 'decrement' }
+// ✅ POST /api/policylike { id: number, action: "increment" | "decrement" }
 export async function POST(request: Request) {
   const body = await request.json();
-  const { name, action } = body as { name?: string; action?: string };
-  if (!name || !action || !['increment', 'decrement'].includes(action)) {
+  const { id, action } = body as { id?: number; action?: string };
+  if (typeof id !== 'number' || !['increment', 'decrement'].includes(action || '')) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
@@ -49,11 +49,14 @@ export async function POST(request: Request) {
     const delta = action === 'increment' ? 1 : -1;
     const result = await session.run(
       `
-        MATCH (p:Policy { name: $name })
+        MATCH (p:Policy { id: $pid })
         SET p.like = coalesce(p.like, 0) + $delta
         RETURN p.like AS like
       `,
-      { name, delta: int(delta) }
+      {
+        pid: neo4j.int(id),
+        delta: int(delta),
+      }
     );
 
     const raw = result.records[0].get('like');

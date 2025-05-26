@@ -1,26 +1,22 @@
-// ✅ /app/api/party/[name]/route.ts
+// ✅ /app/api/party/[id]/route.ts → เปลี่ยน path ด้วยให้เป็น [id]
 import { NextRequest, NextResponse } from 'next/server';
 import driver from '@/app/lib/neo4j';
 
 export async function GET(
   req: NextRequest,
-  context: { params: Promise<{ name: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { name } = await context.params; // ✅ ต้อง await
-  const decodedName = decodeURIComponent(name);
-
-
+  const { id } = await context.params;
+  const decodedId = parseInt(decodeURIComponent(id), 10);
 
   const session = driver.session();
   try {
     const result = await session.run(
       `
-      MATCH (p:Party {name: $name})
-      RETURN p {
-        .name, .description, .link, .logo
-      } AS party
+      MATCH (p:Party {id: $id})
+      RETURN p { .id, .name, .description, .link, .logo } AS party
       `,
-      { name }
+      { id: decodedId }
     );
 
     if (result.records.length === 0) {
@@ -35,21 +31,25 @@ export async function GET(
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { name: string } }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   const session = driver.session();
-  const { name } = params;
+  const id = parseInt(decodeURIComponent(params.id), 10);
 
   try {
-    const { description, link, logo } = await req.json();
+    const { name, description, link, logo } = await req.json();
 
     await session.run(
       `
-      MERGE (p:Party {name: $name})
-      SET p.description = $description,
+      MERGE (p:Party {id: $id})
+      SET p.name = $name,
+          p.description = $description,
           p.link = $link,
           p.logo = $logo
       `,
-      { name: decodeURIComponent(name), description, link, logo }
+      { id, name, description, link, logo }
     );
 
     return NextResponse.json({ message: "Saved successfully" });

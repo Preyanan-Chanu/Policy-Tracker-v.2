@@ -9,21 +9,25 @@ export async function GET(req: NextRequest) {
     const result = await session.run(`
       MATCH (e:Event)
       OPTIONAL MATCH (e)-[:ORGANIZED_BY]->(p:Party)
-      RETURN e.name AS name,
-             e.description AS description,
-             e.date AS date,
-             e.location AS location,
-             p.name AS party
+     RETURN e.id AS id,
+       e.name AS name,
+       e.description AS description,
+       e.date AS date,
+       e.location AS location,
+       p.name AS party
       ORDER BY e.date DESC
     `);
 
     const events = result.records.map((r) => ({
-      name: r.get("name"),
-      description: r.get("description"),
-      date: r.get("date"),
-      location: r.get("location"),
-      party: r.get("party"),
-    }));
+  id: typeof r.get("id")?.toNumber === "function"
+    ? r.get("id").toNumber()
+    : r.get("id"),
+  name: r.get("name"),
+  description: r.get("description"),
+  date: r.get("date"),
+  location: r.get("location"),
+  party: r.get("party"),
+}));
 
     return NextResponse.json(events);
   } catch (err) {

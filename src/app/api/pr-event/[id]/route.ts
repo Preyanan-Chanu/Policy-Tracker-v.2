@@ -1,11 +1,10 @@
-// /api/pr-event/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 
+// 🔹 GET: ดึงข้อมูลกิจกรรมตาม ID
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-
- const idNumber = parseInt(id);
+  const idNumber = parseInt(id);
   if (isNaN(idNumber)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
   const session = driver.session();
@@ -14,7 +13,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const result = await session.run(
       `
       MATCH (e:Event {id: toInteger($id)})
-
       OPTIONAL MATCH (e)-[:LOCATED_IN]->(prov:Province)
       OPTIONAL MATCH (e)-[:RELATED_POLICY]->(po:Policy)
       OPTIONAL MATCH (e)-[:UNDER_CAMPAIGN]->(c:Campaign)
@@ -52,6 +50,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   }
 }
 
+// 🔹 DELETE: ลบกิจกรรมตาม ID
 export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const idNumber = parseInt(id);
@@ -61,11 +60,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
 
   try {
     await session.run(
-      `
-      MATCH (e:Event {id: toInteger($id)})
-
-      DETACH DELETE e
-      `,
+      `MATCH (e:Event {id: toInteger($id)}) DETACH DELETE e`,
       { id: idNumber }
     );
 
@@ -78,21 +73,21 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
   }
 }
 
-
+// 🔹 PUT: อัปเดตกิจกรรมตาม ID
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-
   const idNumber = parseInt(id);
   if (isNaN(idNumber)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
   const {
-    name, description, date, time, location, map, policy, campaign, province, status
+    name, description, date, time, location, map,
+    policy, campaign, province, status
   } = await req.json();
 
   const session = driver.session();
- 
+
   try {
-    // อัปเดต properties
+    // 🔸 อัปเดต properties หลัก
     await session.run(
       `
       MATCH (e:Event {id: toInteger($id)})
@@ -107,7 +102,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       { id: idNumber, name, description, date, time, location, map, status }
     );
 
-    // ลบความสัมพันธ์เดิมทั้งหมด
+    // 🔸 ลบความสัมพันธ์เดิม
     await session.run(
       `
       MATCH (e:Event {id: toInteger($id)})
@@ -117,34 +112,55 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       { id: idNumber }
     );
 
-    // สร้างความสัมพันธ์ใหม่
+    // 🔸 สร้างความสัมพันธ์ใหม่
     if (policy) {
-      await session.run(
-        `
-        MATCH (e:Event {id: toInteger($id)})
-        MATCH (p:Policy {name: $policy})
-        MERGE (e)-[:RELATED_POLICY]->(p)
-        `,
-        { id: idNumber, policy }
-      );
-    }
+  await session.run(
+    `
+    MATCH (e:Event {id: toInteger($id)})
+    MATCH (p:Policy {name: $policy})
+    MERGE (e)-[:RELATED_POLICY]->(p)
+    `,
+    { id: idNumber, policy }
+  );
+}
 
-    if (campaign) {
-      await session.run(
-        `
-        MATCH (e:Event {id: toInteger($id)})
-        MATCH (c:Campaign {name: $campaign})
-        MERGE (e)-[:UNDER_CAMPAIGN]->(c)
-        `,
-        { id: idNumber, campaign }
-      );
-    }
+// ✅ ย้าย DELETE ออกมานอก if
+await session.run(
+  `
+  MATCH (e:Event {id: toInteger($id)})-[r:UNDER_CAMPAIGN]->()
+  DELETE r
+  `,
+  { id: idNumber }
+);
+
+if (campaign && campaign.trim() !== "") {
+  await session.run(
+    `
+    MATCH (e:Event {id: toInteger($id)})
+    MATCH (c:Campaign {name: $campaign})
+    MERGE (e)-[:UNDER_CAMPAIGN]->(c)
+    `,
+    { id: idNumber, campaign }
+  );
+}
+
+if (province) {
+  await session.run(
+    `
+    MATCH (e:Event {id: toInteger($id)})
+    MERGE (prov:Province {name: $province})
+    MERGE (e)-[:LOCATED_IN]->(prov)
+    `,
+    { id: idNumber, province }
+  );
+}
+
 
     if (province) {
       await session.run(
         `
         MATCH (e:Event {id: toInteger($id)})
-        MATCH (prov:Province {name: $province})
+        MERGE (prov:Province {name: $province})
         MERGE (e)-[:LOCATED_IN]->(prov)
         `,
         { id: idNumber, province }
@@ -159,4 +175,3 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     await session.close();
   }
 }
-

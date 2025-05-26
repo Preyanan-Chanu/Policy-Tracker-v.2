@@ -4,7 +4,7 @@ import pg from "@/app/lib/postgres";
 
 // ✅ POST: สร้างนโยบายใหม่
 export async function POST(req: NextRequest) {
-  const { name, description, banner, category, party } = await req.json();
+  const { name, description, banner, category, party, status } = await req.json(); // 👈 เพิ่ม status
   const session = driver.session();
 
   if (!party || party === "ไม่ทราบชื่อพรรค") {
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       SET p.name = $name,
           p.description = $description,
           p.banner = $banner,
-          p.status = "เริ่มนโยบาย",
+          p.status = $status,         // 👈 ใช้ค่าที่เลือก
           p.like = 0,
           p.progress = "0%"
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       MATCH (pt:Party {name: $party})
       MERGE (p)-[:BELONGS_TO]->(pt)
       `,
-      { id, name, description, banner, category, party: cleanedParty }
+      { id, name, description, banner, category, party: cleanedParty, status } // 👈 ส่งค่า status
     );
 
     return NextResponse.json({ message: "สร้างนโยบายสำเร็จ", id });
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
 // ✅ PUT: อัปเดตนโยบายเดิม
 export async function PUT(req: NextRequest) {
-  const { id, name, description, banner, category } = await req.json();
+  const { id, name, description, banner, category, status } = await req.json(); // 👈 เพิ่ม status
   const session = driver.session();
 
   if (!id) {
@@ -91,9 +91,10 @@ export async function PUT(req: NextRequest) {
       MATCH (p:Policy {id: toInteger($id)})
       SET p.name = $name,
           p.description = $description,
-          p.banner = $banner
+          p.banner = $banner,
+          p.status = $status         // 👈 บันทึกสถานะใหม่
       `,
-      { id, name, description, banner }
+      { id, name, description, banner, status }
     );
 
     // ✅ ลบความสัมพันธ์เดิม
@@ -115,7 +116,7 @@ export async function PUT(req: NextRequest) {
       { id, category }
     );
 
-    // ✅ อัปเดต PostgreSQL
+    // ✅ อัปเดต PostgreSQL (หากมี field อื่นเพิ่มให้ทำที่นี่)
     await pg.query(
       `UPDATE policies SET name = $1 WHERE id = $2`,
       [name, id]

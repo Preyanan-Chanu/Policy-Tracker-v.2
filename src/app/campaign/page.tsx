@@ -73,12 +73,22 @@ export default function CampaignListPage() {
     selectedParty ? c.party === selectedParty : true
   );
 
-  const normalCampaigns = filtered.filter(
-    (c) => !c.policy.includes("โครงการพิเศษ")
-  );
-  const specialCampaigns = filtered.filter((c) =>
-    c.policy.includes("โครงการพิเศษ")
-  );
+  
+
+  const normalCampaigns = filtered.filter((c) => {
+  const names = Array.isArray(c.policy)
+    ? c.policy.map((p: any) => p.name).join(" ")
+    : String(c.policy);
+  return !names.includes("โครงการพิเศษ");
+});
+
+const specialCampaigns = filtered.filter((c) => {
+  const names = Array.isArray(c.policy)
+    ? c.policy.map((p: any) => p.name).join(" ")
+    : String(c.policy);
+  return names.includes("โครงการพิเศษ");
+});
+console.log("🔍 c.policy ตัวอย่าง", campaigns.map(c => c.policy));
 
   return (
     <div className="font-prompt">
@@ -93,7 +103,7 @@ export default function CampaignListPage() {
             value={selectedParty}
             onChange={(e) => setSelectedParty(e.target.value)}
           >
-            <option value="">ทั้งหมด</option>
+            <option value="">ร่วมรัฐบาล</option>
             {parties.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
@@ -108,7 +118,7 @@ export default function CampaignListPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {normalCampaigns.map((c) => (
                 <Link
-  href={`/campaigndetail/${encodeURIComponent(c.name)}`}
+  href={`/campaigndetail/${encodeURIComponent(c.id.toString())}`}
   key={`${c.name}-${c.party}`}
   className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition cursor-pointer relative no-underline"
 >
@@ -122,7 +132,11 @@ export default function CampaignListPage() {
   <p className="text-gray-600 mb-1">นโยบาย: {c.policy}</p>
   <p className="text-gray-600 mb-1">สถานะ: {c.status}</p>
   <p className="text-gray-600 mb-1">ขนาด: {c.size}</p>
-  <p className="text-gray-600">งบประมาณ: {c.budget?.toLocaleString() || "-"} บาท</p>
+  <p className="text-gray-600">
+  งบประมาณ: {c.budget != null && !isNaN(Number(c.budget))
+    ? `${Number(c.budget).toLocaleString("th-TH")} บาท`
+    : "-"}
+</p>
 </Link>
 
 
@@ -153,7 +167,12 @@ export default function CampaignListPage() {
   <p className="text-gray-600 mb-1">นโยบาย: {c.policy}</p>
   <p className="text-gray-600 mb-1">สถานะ: {c.status}</p>
   <p className="text-gray-600 mb-1">ขนาด: {c.size}</p>
-  <p className="text-gray-600">งบประมาณ: {c.budget?.toLocaleString() || "-"} บาท</p>
+  <p className="text-gray-600">
+  งบประมาณ: {c.budget != null && !isNaN(Number(c.budget))
+    ? `${Number(c.budget).toLocaleString("th-TH")} บาท`
+    : "-"}
+</p>
+  
 </Link>
 
 

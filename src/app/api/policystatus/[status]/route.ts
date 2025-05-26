@@ -1,4 +1,4 @@
-// src/app/api/statuscategory/[name]/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 

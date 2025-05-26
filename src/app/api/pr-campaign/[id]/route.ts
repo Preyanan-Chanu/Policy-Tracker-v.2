@@ -97,10 +97,10 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
 
   try {
     // 🔥 ลบจาก Firebase Storage
-    try {
-      const bannerRef = ref(storage, `campaign/banner/${idString}.jpg`);
-      await deleteObject(bannerRef);
-    } catch { }
+    // try {
+    //   const bannerRef = ref(storage, `campaign/banner/${idString}.jpg`);
+    //   await deleteObject(bannerRef);
+    // } catch { }
 
     try {
       const pdfRef = ref(storage, `campaign/reference/${idString}.pdf`);
@@ -148,7 +148,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     partyId,
     budget,
     expenses,
-    banner,
+    // banner,
     area,
     impact,
     size
@@ -188,13 +188,12 @@ SET c.name = $name,
     c.description = $description,
     c.status = $status,
     c.progress = $progress,
-    c.banner = $banner,
     c.area = $area,
     c.impact = $impact,
     c.size = $size
 
       `,
-      { id: idNumber, name, description, status, progress, banner, area, impact, size, partyId }
+      { id: idNumber, name, description, status, progress, area, impact, size, partyId }
     );
     } else {
       // ✅ กรณีโครงการทั่วไป
@@ -218,13 +217,12 @@ SET c.name = $name,
     c.description = $description,
     c.status = $status,
     c.progress = $progress,
-    c.banner = $banner,
     c.area = $area,
     c.impact = $impact,
     c.size = $size
 
       `,
-      { id: idNumber, policyId, name, description, status, progress, banner, area, impact, size, partyId }
+      { id: idNumber, policyId, name, description, status, progress, area, impact, size, partyId }
     );
     }
 

@@ -4,14 +4,16 @@ import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Heart } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 interface Policy {
+  policyId: number;
   policyName: string;
   description: string;
   partyName: string;
-  budget: string | number;
+  budget: number | null;
   categoryName: string;
-  progress: string;
+  progress: number;
   status: string;
 }
 
@@ -23,78 +25,148 @@ const PolicyCategoryNamePage = () => {
   const category = decodeURIComponent(name);
 
   const [policies, setPolicies] = useState<Policy[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [likesMap, setLikesMap] = useState<Record<string, number>>({});
-  const [likedState, setLikedState] = useState<Record<string, boolean>>({});
-
+  const [likesMap, setLikesMap] = useState<Record<number, number>>({});
+  const [likedState, setLikedState] = useState<Record<number, boolean>>({});
   const [selectedStatus, setSelectedStatus] = useState("ทั้งหมด");
   const [selectedParty, setSelectedParty] = useState("ทั้งหมด");
   const [partyList, setPartyList] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // ดึง policy จาก API
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/policycategory/${encodeURIComponent(category)}`);
-        const data: Policy[] = await res.json();
-        setPolicies(data || []);
-        const uniqueParties = Array.from(new Set(data.map(p => p.partyName || "ไม่ระบุพรรค")));
-        setPartyList(["ทั้งหมด", ...uniqueParties]);
-      } catch (err) {
-        console.error("❌ Error fetching policies:", err);
-      } finally {
-        setLoading(false);
+  const fetchPolicies = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const query = new URLSearchParams();
+      if (selectedParty !== "ทั้งหมด") query.append("party", selectedParty);
+      if (selectedStatus !== "ทั้งหมด") query.append("status", selectedStatus);
+
+      const res = await fetch(`/api/policycategory/${encodeURIComponent(category)}?${query.toString()}`);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
-    })();
-  }, [category]);
 
-  // ดึงจำนวน like จาก API
+      const data = await res.json();
+      
+      if (data.error) {
+        throw new Error(data.message || data.error);
+      }
+
+      if (Array.isArray(data)) {
+        const processedPolicies = data.map((p: any, idx: number) => {
+          // ประมวลผล policyId ให้เป็น number
+          let policyId: number;
+          const rawId = p.policyId;
+          
+          if (typeof rawId === "number") {
+            policyId = rawId;
+          } else if (typeof rawId === "object" && rawId !== null && typeof rawId.low === "number") {
+            policyId = rawId.low;
+          } else if (typeof rawId === "string") {
+            const parsed = parseInt(rawId, 10);
+            policyId = isNaN(parsed) ? (idx + 1) : parsed;
+          } else {
+            policyId = idx + 1;
+          }
+
+          return {
+            ...p,
+            policyId: policyId,
+          };
+        });
+        
+        setPolicies(processedPolicies);
+      } else {
+        console.error("⚠️ Invalid API response format:", data);
+        setPolicies([]);
+      }
+    } catch (err) {
+      console.error("❌ Error fetching policies:", err);
+      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการโหลดข้อมูล");
+      setPolicies([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ดึงรายชื่อพรรคการเมือง
   useEffect(() => {
-    const init: Record<string, boolean> = {};
-    policies.forEach((p) => {
-      init[p.policyName] = localStorage.getItem(`liked_${p.policyName}`) === "true";
+    const fetchParties = async () => {
+      try {
+        const res = await fetch("/api/parties");
+        if (res.ok) {
+          const data: string[] = await res.json();
+          setPartyList(["ทั้งหมด", ...data]);
+        }
+      } catch (err) {
+        console.error("❌ Error fetching party list:", err);
+      }
+    };
+    fetchParties();
+  }, []);
 
-      fetch(`/api/policylike?name=${encodeURIComponent(p.policyName)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          const raw = data.like;
-          const count = typeof raw === "number"
-            ? raw
-            : typeof raw?.toNumber === "function"
-            ? raw.toNumber()
-            : Number(raw) || 0;
-          setLikesMap((m) => ({ ...m, [p.policyName]: count }));
-        })
-        .catch((err) => console.error("❌ fetch like error:", err));
+  // ดึงข้อมูลนโยบายเมื่อ filter เปลี่ยน
+  useEffect(() => {
+    fetchPolicies();
+  }, [category, selectedParty, selectedStatus]);
+
+  // จัดการข้อมูล like status และ count
+  useEffect(() => {
+    if (policies.length === 0) return;
+
+    const initLikedState: Record<number, boolean> = {};
+    
+    // อ่าน like status จาก in-memory storage (เนื่องจากไม่สามารถใช้ localStorage ได้)
+    policies.forEach((p) => {
+      initLikedState[p.policyId] = false; // default เป็น false
     });
-    setLikedState(init);
+    
+    setLikedState(initLikedState);
+
+    // ดึงข้อมูล like count จาก API
+    const fetchLikesData = async () => {
+      for (const policy of policies) {
+        try {
+          const res = await fetch(`/api/policylike?id=${policy.policyId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const raw = data.like;
+            const count = typeof raw === "number" ? raw : (raw?.toNumber?.() ?? 0);
+            setLikesMap((prev) => ({ ...prev, [policy.policyId]: count }));
+          }
+        } catch (err) {
+          console.error(`❌ Error fetching like count for policy ${policy.policyId}:`, err);
+        }
+      }
+    };
+
+    fetchLikesData();
   }, [policies]);
 
-  const handleLike = async (policyName: string) => {
-    const isLiked = likedState[policyName];
+  const handleLike = async (policyId: number) => {
+    const isLiked = likedState[policyId];
     const action = isLiked ? "decrement" : "increment";
 
     try {
       const res = await fetch("/api/policylike", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: policyName, action }),
+        body: JSON.stringify({ id: policyId, action }),
       });
 
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data = await res.json();
-      const raw = data.like;
-      const newCount = typeof raw === "number"
-        ? raw
-        : typeof raw?.toNumber === "function"
-        ? raw.toNumber()
-        : Number(raw) || 0;
-
-      setLikesMap((m) => ({ ...m, [policyName]: newCount }));
-      const newVal = !isLiked;
-      localStorage.setItem(`liked_${policyName}`, newVal.toString());
-      setLikedState((s) => ({ ...s, [policyName]: newVal }));
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data.like;
+        const newCount = typeof raw === "number" ? raw : (raw?.toNumber?.() ?? 0);
+        
+        // อัปเดต like count
+        setLikesMap((prev) => ({ ...prev, [policyId]: newCount }));
+        
+        // อัปเดต like status
+        const newLikedStatus = !isLiked;
+        setLikedState((prev) => ({ ...prev, [policyId]: newLikedStatus }));
+      }
     } catch (err) {
       console.error("❌ handleLike error:", err);
     }
@@ -103,14 +175,25 @@ const PolicyCategoryNamePage = () => {
   return (
     <div className="font-prompt">
       <Navbar />
-      <div className="px-10 py-6 bg-[#9795B5] min-h-screen">
+      <div className="px-10 py-6 bg-[#9795B5] min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/bg/หัวข้อ.png')" }}>
         <div className="flex justify-between items-center mt-6 mx-20 mb-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/policycategory")}
-              className="bg-white text-[#5D5A88] px-4 py-2 rounded-full shadow hover:bg-[#e5e5f7] transition"
+              className="
+                flex items-center gap-2
+                px-6 py-3
+                bg-white text-[#2C3E50] font-medium
+                rounded-full
+                shadow-md hover:shadow-lg
+                hover:!bg-[#316599] hover:!text-white
+                transform hover:-translate-y-0.5
+                transition-all duration-200 ease-in-out
+                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5D5A88]/50
+              "
             >
-              &larr; กลับ
+              <ArrowLeft className="w-5 h-5" />
+              ย้อนกลับ
             </button>
             <h1 className="text-[2.5rem] font-bold text-white">
               นโยบายในหมวด: {category}
@@ -118,7 +201,7 @@ const PolicyCategoryNamePage = () => {
           </div>
           <div className="flex gap-3">
             <select
-              className="h-12 px-4 rounded-full text-gray-700"
+              className="h-12 px-4 rounded-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-white/50"
               value={selectedParty}
               onChange={(e) => setSelectedParty(e.target.value)}
             >
@@ -127,7 +210,7 @@ const PolicyCategoryNamePage = () => {
               ))}
             </select>
             <select
-              className="h-12 px-4 rounded-full text-gray-700"
+              className="h-12 px-4 rounded-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-white/50"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
             >
@@ -139,69 +222,82 @@ const PolicyCategoryNamePage = () => {
         </div>
 
         {loading ? (
-          <p className="text-gray-200 text-center mt-10">กำลังโหลด...</p>
+          <div className="flex justify-center items-center mt-20">
+            <div className="text-white text-lg">กำลังโหลดข้อมูล...</div>
+          </div>
+        ) : error ? (
+          <div className="flex justify-center items-center mt-20">
+            <div className="text-red-200 text-lg bg-red-900/30 px-6 py-4 rounded-lg">
+              เกิดข้อผิดพลาด: {error}
+            </div>
+          </div>
         ) : policies.length === 0 ? (
-          <p className="text-white text-center mt-10">ไม่พบนโยบายในหมวดนี้</p>
+          <div className="flex justify-center items-center mt-20">
+            <div className="text-white text-lg bg-white/20 px-6 py-4 rounded-lg">
+              ไม่พบนโยบายในหมวดนี้
+            </div>
+          </div>
         ) : (
-          <div className="mx-20 pb-10 grid grid-cols-3 gap-6">
-            {policies
-              .filter((policy) =>
-                (selectedParty === "ทั้งหมด" || policy.partyName === selectedParty) &&
-                (selectedStatus === "ทั้งหมด" || policy.status === selectedStatus)
-              )
-              .map((policy, idx) => {
-                const encodedPartyName = encodeURIComponent(policy.partyName);
-                const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
+          <div className="mx-20 pb-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {policies.map((policy) => {
+              const encodedPartyName = encodeURIComponent(policy.partyName);
+              const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
 
-                return (
-                  <div key={idx} className="relative bg-white rounded-xl p-4 shadow-lg flex flex-col justify-between h-full">
-                    <div>
-                      <img
-                        src={logoUrl}
-                        alt={`โลโก้ของ ${policy.partyName}`}
-                        className="absolute top-4 right-4 w-12 h-12 object-contain"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "/default-logo.jpg";
-                        }}
-                      />
-                      <h3 className="font-bold text-xl mb-2">{policy.policyName}</h3>
-                      <p className="mb-2">{policy.description}</p>
-                      <div className="grid grid-cols-2 gap-2 mt-6">
-                        <p><strong>พรรค:</strong> {policy.partyName}</p>
-                        <p><strong>งบประมาณ:</strong> {policy.budget}</p>
-                        <p><strong>หมวดหมู่:</strong> {policy.categoryName}</p>
-                        <p><strong>ความคืบหน้า:</strong> {policy.progress}</p>
-                        <p><strong>สถานะ:</strong> {policy.status}</p>
-                      </div>
-                    </div>
-
-                    <div className="text-right mt-4">
-                      <button
-                        onClick={() =>
-                          router.push(`/policydetail/${encodeURIComponent(policy.policyName)}`)
-                        }
-                        className="text-[#5D5A88] hover:underline"
-                      >
-                        ดูเพิ่มเติม →
-                      </button>
-                    </div>
-
-                    <div className="absolute bottom-4 left-4 z-10 flex items-center space-x-1">
-                      <button
-                        onClick={() => handleLike(policy.policyName)}
-                        className="hover:opacity-75 focus:outline-none"
-                      >
-                        <Heart
-                          size={20}
-                          fill={likedState[policy.policyName] ? "currentColor" : "none"}
-                          className={likedState[policy.policyName] ? "text-[#EF4444]" : "text-gray-400"}
-                        />
-                      </button>
-                      <span className="font-medium">{likesMap[policy.policyName] ?? 0}</span>
+              return (
+                <div 
+                  key={policy.policyId} 
+                  className="relative bg-white rounded-xl p-4 shadow-lg flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-200"
+                >
+                  <div>
+                    <img
+                      src={logoUrl}
+                      alt={`โลโก้ของ ${policy.partyName}`}
+                      className="absolute top-4 right-4 w-12 h-12 object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/default-logo.jpg";
+                      }}
+                    />
+                    <h3 className="font-bold text-xl mb-2 pr-16">{policy.policyName}</h3>
+                    <p className="mb-4 text-gray-600 line-clamp-3">{policy.description}</p>
+                    <div className="grid grid-cols-2 gap-2 mt-6 text-sm">
+                      <p><strong>พรรค:</strong> {policy.partyName}</p>
+                      <p><strong>งบประมาณ:</strong> {
+                        policy.budget !== null 
+                          ? policy.budget.toLocaleString() + " บาท"
+                          : "ไม่ระบุ"
+                      }</p>
+                      <p><strong>หมวดหมู่:</strong> {policy.categoryName}</p>
+                      <p><strong>ความคืบหน้า:</strong> {policy.progress}%</p>
+                      <p><strong>สถานะ:</strong> {policy.status}</p>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="text-right mt-4">
+                    <button
+                      onClick={() => router.push(`/policydetail/${policy.policyId}`)}
+                      className="text-[#5D5A88] hover:underline font-medium"
+                    >
+                      ดูเพิ่มเติม →
+                    </button>
+                  </div>
+
+                  <div className="absolute bottom-4 left-4 z-10 flex items-center space-x-1">
+                    <button
+                      onClick={() => handleLike(policy.policyId)}
+                      className="hover:opacity-75 focus:outline-none transition-opacity duration-150"
+                      aria-label={likedState[policy.policyId] ? "ยกเลิกการถูกใจ" : "ถูกใจ"}
+                    >
+                      <Heart
+                        size={20}
+                        fill={likedState[policy.policyId] ? "currentColor" : "none"}
+                        className={likedState[policy.policyId] ? "text-[#EF4444]" : "text-gray-400"}
+                      />
+                    </button>
+                    <span className="font-medium text-sm">{likesMap[policy.policyId] ?? 0}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

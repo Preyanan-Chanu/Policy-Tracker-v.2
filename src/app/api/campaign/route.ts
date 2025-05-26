@@ -3,33 +3,62 @@ import driver from "@/app/lib/neo4j";
 import pg from "@/app/lib/postgres";
 
 export async function GET(req: NextRequest) {
-  const partyName = req.nextUrl.searchParams.get("party") || "";
+  const partyId = parseInt(req.nextUrl.searchParams.get("party") || "0", 10);
   const session = driver.session();
+  const client = await pg.connect();
 
   try {
     const query = `
       MATCH (c:Campaign)-[:PART_OF]->(p:Policy)-[:BELONGS_TO]->(party:Party)
-      ${partyName ? "WHERE party.name = $party" : ""}
-      RETURN c.name AS name, c.description AS description, c.status AS status, c.size AS size,
-             p.name AS policyName, party.name AS partyName
+      ${partyId ? "WHERE party.id = $partyId" : ""}
+      RETURN 
+        c.id AS id, 
+        c.name AS name,
+        c.description AS description,
+        c.status AS status,
+        c.size AS size,
+        p.id AS policyId,
+        p.name AS policyName,
+        party.id AS partyId,
+        party.name AS partyName
     `;
 
-    const result = await session.run(query, { party: partyName });
+    const result = await session.run(query, { partyId });
 
     const normalCampaigns = [];
     const specialCampaigns = [];
 
     for (const record of result.records) {
+      const id = record.get("id")?.toNumber?.() ?? null;
       const name = record.get("name");
       const description = record.get("description") || "";
       const status = record.get("status") || "-";
       const size = record.get("size") ?? "-";
-      const policy = record.get("policyName") || "";
-      const party = record.get("partyName") || "";
+      const policyId = record.get("policyId")?.toNumber?.() ?? null;
+      const policyName = record.get("policyName") || "";
+      const partyId = record.get("partyId")?.toNumber?.() ?? null;
+      const partyName = record.get("partyName") || "";
 
-      const isSpecial = policy.includes("โครงการพิเศษ");
+      const isSpecial = policyName.includes("โครงการพิเศษ");
 
-      const data = { name, description, status, policy, party, size };
+      // 🔍 ดึง allocated_budget จาก PostgreSQL โดยใช้ id
+      const budgetResult = await client.query(
+        `SELECT allocated_budget FROM campaigns WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      const budget = budgetResult.rows[0]?.allocated_budget ?? null;
+
+      const data = {
+  id,
+  name,
+  description,
+  status,
+  policy: policyName,   // ✅ ส่ง string
+  party: partyName,     // ✅ ส่ง string
+  size,
+  budget,
+};
+
       if (isSpecial) {
         specialCampaigns.push(data);
       } else {

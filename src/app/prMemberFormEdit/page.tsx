@@ -93,7 +93,7 @@ await updateDoc(docRef, {
 
 
     return (
-        <div className="min-h-screen bg-[#9795B5] flex">
+        <div className="min-h-screen bg-cover bg-center flex" style={{ backgroundImage: "url('/bg/ผีเสื้อ.jpg')" }}>
             <PRSidebar />
             <div className="flex-1 md:ml-64 p-8">
                 <h1 className="text-3xl text-white mb-6">แก้ไขข้อมูลสมาชิก</h1>

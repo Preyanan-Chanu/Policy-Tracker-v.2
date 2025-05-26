@@ -1,4 +1,3 @@
-// ✅ สำหรับ route: /api/party
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 
@@ -7,10 +6,11 @@ export async function GET(req: NextRequest) {
   try {
     const result = await session.run(`
       MATCH (p:Party)
-      RETURN p.name AS name, p.description AS description, p.link AS link, p.logo AS logo
+      RETURN p.id AS id, p.name AS name, p.description AS description, p.link AS link, p.logo AS logo
     `);
 
     const parties = result.records.map((r) => ({
+      id: r.get("id")?.toNumber?.() ?? null,
       name: r.get("name"),
       description: r.get("description"),
       link: r.get("link"),

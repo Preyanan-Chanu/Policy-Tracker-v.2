@@ -8,6 +8,7 @@ interface SidebarProps {
 
 const PRSidebar = ({ isMobile = false, onClose }: SidebarProps) => {
   const links = [
+    { href: "/pr", label: "หน้าแรก" },
     { href: "/prPolicy", label: "นโยบาย" },
     { href: "/prCampaign", label: "โครงการ" },
     { href: "/prEvent", label: "กิจกรรม" },

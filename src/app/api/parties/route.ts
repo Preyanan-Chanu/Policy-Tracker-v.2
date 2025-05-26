@@ -1,20 +1,25 @@
-// app/api/parties/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = driver.session();
+
   try {
-    const result = await session.run(`
-      MATCH (p:Party)
-      RETURN DISTINCT p.name AS name
-      ORDER BY p.name
-    `);
-    const parties = result.records.map(r => r.get("name") as string);
+    const result = await session.run(
+      `MATCH (party:Party) RETURN party.name AS name ORDER BY party.name`
+    );
+
+    const parties = result.records.map((record) => {
+      const name = record.get("name");
+      return typeof name === 'string' ? name : String(name || "");
+    }).filter(name => name.length > 0);
+
+    console.log("✅ Parties fetched:", parties);
     return NextResponse.json(parties);
-  } catch (error) {
-    console.error("Failed to fetch parties:", error);
-    return NextResponse.json([], { status: 500 });
+
+  } catch (err) {
+    console.error("❌ Error fetching parties:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   } finally {
     await session.close();
   }

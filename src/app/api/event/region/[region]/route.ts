@@ -14,14 +14,24 @@ export async function GET(
       `
       MATCH (e:Event)-[:LOCATED_IN]->(p:Province)-[:IN_REGION]->(r:Region {name: $region})
       OPTIONAL MATCH (e)-[:ORGANIZED_BY]->(party:Party)
-      RETURN e.name AS name, e.description AS description, e.date AS date,
-             e.location AS location, party.name AS party, r.name AS region
+      RETURN 
+        e.id AS id, 
+        e.name AS name, 
+        e.description AS description, 
+        e.date AS date,
+        e.location AS location, 
+        party.name AS party, 
+        r.name AS region
       ORDER BY e.date DESC
       `,
       { region }
     );
 
     const events = result.records.map((record) => ({
+      id:
+        typeof record.get("id")?.toNumber === "function"
+          ? record.get("id").toNumber()
+          : record.get("id"),
       name: record.get("name"),
       description: record.get("description"),
       date: record.get("date"),

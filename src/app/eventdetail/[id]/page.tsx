@@ -14,8 +14,8 @@ const mapContainerStyle = {
 };
 
 const EventDetailPage = () => {
-  const { name } = useParams();
-  const decodedName = decodeURIComponent(name as string);
+  const { id } = useParams();
+const eventId = decodeURIComponent(id as string);
   const router = useRouter();
   const { isLoaded } = useGoogleMapsLoader();
 
@@ -24,7 +24,7 @@ const EventDetailPage = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res = await fetch(`/api/eventdetail/${encodeURIComponent(decodedName)}`);
+      const res = await fetch(`/api/eventdetail/${encodeURIComponent(eventId)}`);
       const data = await res.json();
       setEventData(data);
        fetchBanner(data.id);
@@ -50,7 +50,7 @@ const EventDetailPage = () => {
 
     fetchData();
   
-  }, [decodedName]);
+  }, [eventId]);
 
   if (!eventData) return <div className="text-center py-20">กำลังโหลดข้อมูล...</div>;
 
@@ -101,7 +101,7 @@ const EventDetailPage = () => {
     {/* Metadata */}
     <div className="grid md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-xl shadow mb-6">
       <div className="space-y-2 font-semibold">
-        <p>📅 วัน: {eventData.date}</p>
+        <p>📅 วัน: {eventData.date || "ไม่ระบุ"}</p>
         <p>⏰ เวลา: {eventData.time}</p>
         <p>📍 สถานที่: {eventData.location}</p>
         <p>🧭 สถานะ: {eventData.status}</p>
@@ -110,7 +110,7 @@ const EventDetailPage = () => {
         {eventData.relatedPolicy && (
           <button
             onClick={() =>
-              router.push(`/policydetail/${encodeURIComponent(eventData.relatedPolicy.name)}`)
+              router.push(`/policydetail/${encodeURIComponent(eventData.relatedPolicy.id)}`)
             }
             className="bg-[#5D5A88] text-white px-4 py-2 rounded-full shadow hover:bg-[#403b7a] transition"
           >
@@ -121,9 +121,13 @@ const EventDetailPage = () => {
           src={`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(eventData.party)}.png?alt=media`}
           alt="โลโก้พรรค"
           className="h-[40px]"
-          onError={(e) =>
-            ((e.target as HTMLImageElement).src = "/default-logo.png")
-          }
+          onError={(e) => {
+  const img = e.target as HTMLImageElement;
+  if (!img.src.includes("default-logo.png")) {
+    img.src = "/default-logo.png";
+  }
+}}
+
         />
       </div>
     </div>

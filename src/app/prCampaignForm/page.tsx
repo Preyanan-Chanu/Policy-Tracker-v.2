@@ -112,9 +112,9 @@ if (storedId) {
       setPolicyId("special");
     }
 
-      try {
-        setBannerPreviewUrl(await getDownloadURL(ref(storage, `campaign/banner/${campaignId}.jpg`)));
-      } catch {}
+      // try {
+      //   setBannerPreviewUrl(await getDownloadURL(ref(storage, `campaign/banner/${campaignId}.jpg`)));
+      // } catch {}
 
       try {
         setRefPreviewUrl(await getDownloadURL(ref(storage, `campaign/reference/${campaignId}.pdf`)));
@@ -140,10 +140,10 @@ if (storedId) {
   };
 
   const handleExpenseChange = (index: number, field: "description" | "amount", value: string) => {
-    const updated = [...expenses];
-    updated[index][field] = value;
-    setExpenses(updated);
-  };
+  const updated = [...expenses];
+  updated[index] = { ...updated[index], [field]: value };
+  setExpenses(updated);
+};
 
   const addExpenseRow = () => {
     setExpenses([...expenses, { description: "", amount: "" }]);
@@ -152,6 +152,7 @@ if (storedId) {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
      setIsSubmitting(true);
+     
     const isSpecial = policyId === "special";
     let finalId: string | null = campaignId;
 
@@ -220,7 +221,7 @@ if (storedId) {
 
 
   return (
-    <div className="min-h-screen bg-[#9795B5] flex">
+    <div className="min-h-screen bg-cover bg-center flex" style={{ backgroundImage: "url('/bg/ผีเสื้อ.jpg')" }}>
       <PRSidebar />
       <div className="flex-1 md:ml-64">
         <header className="bg-white p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
@@ -232,10 +233,12 @@ if (storedId) {
           <div className="mt-6 bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto">
             <form onSubmit={handleSubmit} className="space-y-4">
               <label className="block font-bold">ชื่อโครงการ:</label>
-              <input value={campaignName} onChange={(e) => setCampaignName(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md" />
+              <input value={campaignName} onChange={(e) => setCampaignName(e.target.value)} required placeholder="สร้าง Floodway ขนาดใหญ่" className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">รายละเอียดโครงการ:</label>
-              <textarea value={campaignDes} onChange={(e) => setCampaignDes(e.target.value)} rows={5} required className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={campaignDes} onChange={(e) => setCampaignDes(e.target.value)} rows={5} required 
+              placeholder="นอกจากการขุดลอกคูคลอง แน่นอนว่าต้องมีนโยบายและโครงสร้างขนาดใหญ่อื่นๆ มารองรับ โดยเฉพาะกรุงเทพมหานครที่มีโอกาสถูกน้ำท่วมเมืองได้ หนึ่งในโครงสร้างใหญ่ คือการสร้าง Floodway เพื่อแก้ปัญหาน้ำท่วมเมืองอย่างจริงจัง" 
+              className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">นโยบายที่เกี่ยวข้อง:</label>
               <select
@@ -287,15 +290,48 @@ if (storedId) {
               <input value={size} readOnly className="w-full p-2 border border-gray-300 rounded-md bg-gray-100" />
 
               <label className="block font-bold">งบประมาณที่ได้รับ (บาท):</label>
-              <input type="number" value={campaignBudget} onChange={(e) => setCampaignBudget(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md" />
+<input
+  type="text"
+  inputMode="numeric"
+  value={Number(campaignBudget || 0).toLocaleString("th-TH")}
+  onChange={(e) => {
+    const raw = e.target.value.replace(/,/g, ""); // ลบ ,
+    const numeric = parseInt(raw, 10) || 0;
+    setCampaignBudget(numeric.toString());
+  }}
+  required
+  placeholder="4,500,000"
+  className="w-full p-2 border border-gray-300 rounded-md"
+/>
+
 
               <label className="block font-bold">รายการรายจ่าย:</label>
               {expenses.map((exp, idx) => (
                 <div key={idx} className="flex space-x-2">
-                  <input type="text" value={exp.description} onChange={(e) => handleExpenseChange(idx, "description", e.target.value)} placeholder="รายละเอียด" className="w-2/3 p-2 border rounded" />
-                  <input type="number" value={exp.amount} onChange={(e) => handleExpenseChange(idx, "amount", e.target.value)} placeholder="จำนวนเงิน" className="w-1/3 p-2 border rounded" />
-                </div>
-              ))}
+    {/* รายการรายจ่าย */}
+    <input
+      type="text"
+      value={exp.description}
+      onChange={(e) => handleExpenseChange(idx, "description", e.target.value)}
+      placeholder="ค่าดำเนินการ"
+      className="w-2/3 p-2 border rounded"
+    />
+
+    {/* จำนวนเงิน แบบมี , */}
+    <input
+      type="text"
+      inputMode="numeric"
+      value={Number(exp.amount || 0).toLocaleString("th-TH")}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/,/g, "");
+        const numeric = parseInt(raw, 10) || 0;
+        handleExpenseChange(idx, "amount", numeric.toString()); // ✅ ส่งเป็น string
+      }}
+      placeholder="จำนวนเงิน"
+      className="w-1/3 p-2 border rounded"
+    />
+  </div>
+))}
               <button type="button" onClick={addExpenseRow} className="text-sm text-blue-500">+ เพิ่มรายการ</button>
 
               <p className="text-gray-500">
@@ -384,9 +420,19 @@ if (storedId) {
                 <a href={refPreviewUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline block mt-2">ดูเอกสาร (PDF)</a>
               )}
 
-              <button type="submit" className="w-full bg-[#5D5A88] text-white p-3 rounded-md hover:bg-[#46426b] mt-4">
-                {campaignId ? "บันทึกการแก้ไข" : "บันทึกโครงการ"}
-              </button>
+              <button
+  type="submit"
+  disabled={isSubmitting}
+  className={`w-full p-3 rounded-md mt-4 transition
+    ${isSubmitting ? "bg-gray-400 cursor-not-allowed" : "bg-[#5D5A88] hover:bg-[#46426b] text-white"}`}
+>
+  {isSubmitting
+    ? "⏳ กำลังบันทึก..."
+    : campaignId
+    ? "บันทึกการแก้ไข"
+    : "บันทึกโครงการ"}
+</button>
+
             </form>
           </div>
         </main>

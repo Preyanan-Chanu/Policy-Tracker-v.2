@@ -18,27 +18,23 @@ interface Event {
 export default function PRActivitiesPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
-  const [partyName, setPartyName] = useState<string | null>(null);
+  const [partyId, setPartyId] = useState<string | null>(null);
   const router = useRouter();
 
-  // โหลดชื่อพรรคจาก localStorage
   useEffect(() => {
-    const storedParty = localStorage.getItem("partyName") ?? "";
-    const cleanName = storedParty.trim();
-    setPartyName(cleanName);
+    const stored = localStorage.getItem("partyId") ?? "";
+    setPartyId(stored.trim());
   }, []);
-  
 
-  // ดึงข้อมูลกิจกรรมจาก API
   useEffect(() => {
-    if (!partyName) return;
+    if (!partyId) return;
 
     const fetchEvents = async () => {
       try {
         const res = await fetch("/api/pr-event", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ partyName }),
+          body: JSON.stringify({ partyId }),
         });
         const data = await res.json();
         console.log("✅ Events data from API:", data);
@@ -49,7 +45,7 @@ export default function PRActivitiesPage() {
     };
 
     fetchEvents();
-  }, [partyName]);
+  }, [partyId]);
 
   const goToEventForm = () => {
     router.push("/prEventForm");
@@ -62,12 +58,12 @@ export default function PRActivitiesPage() {
   const deleteEvent = async (id: number) => {
     const confirmDelete = confirm("คุณแน่ใจว่าต้องการลบกิจกรรมนี้?");
     if (!confirmDelete) return;
-  
+
     try {
       const res = await fetch(`/api/pr-event/${id}`, {
         method: "DELETE",
       });
-  
+
       if (res.ok) {
         alert("✅ ลบกิจกรรมสำเร็จ");
         setEvents((prev) => prev.filter((event) => event.id !== id));
@@ -80,20 +76,18 @@ export default function PRActivitiesPage() {
       alert("เกิดข้อผิดพลาดระหว่างลบ");
     }
   };
-  
 
-  if (!partyName) {
+  if (!partyId) {
     return <div className="text-center text-white py-10">กำลังโหลดข้อมูลพรรค...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-[#9795B5] flex">
+    <div className="min-h-screen bg-cover bg-center flex" style={{ backgroundImage: "url('/bg/ผีเสื้อ.jpg')" }}>
       <PRSidebar />
 
       <div className="flex-1 md:ml-64">
-        {/* Navbar */}
         <header className="bg-white p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
-          <h1 className="text-2xl font-bold text-[#5D5A88]">PR พรรค {partyName}</h1>
+          <h1 className="text-2xl font-bold text-[#5D5A88]">กิจกรรมของพรรค</h1>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="md:hidden text-3xl text-[#5D5A88] focus:outline-none"
@@ -109,14 +103,12 @@ export default function PRActivitiesPage() {
           </ul>
         </header>
 
-        {/* Mobile Sidebar */}
         {menuOpen && (
           <div className="md:hidden bg-gray-100 p-4 absolute top-16 left-0 w-full shadow-md">
-            {/* คุณใส่ PRSidebar แบบ mobile ได้ที่นี่ถ้าทำไว้ */}
+            {/* Mobile menu (ถ้ามี) */}
           </div>
         )}
 
-        {/* Main Content */}
         <main className="p-6">
           <div className="flex justify-end mb-4">
             <button

@@ -4,22 +4,25 @@ import { NextResponse } from "next/server";
 import neo4j, { int, isInt } from "neo4j-driver";
 import driver from "@/app/lib/neo4j";
 
-// GET /api/campaigndetaillike?name=...
+// GET /api/campaigndetaillike?id=...
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const name = url.searchParams.get("name");
-  if (!name) {
-    return NextResponse.json({ error: "Missing campaign name" }, { status: 400 });
+  const idParam = url.searchParams.get("id");
+
+  if (!idParam) {
+    return NextResponse.json({ error: "Missing campaign id" }, { status: 400 });
   }
 
+  const id = int(parseInt(idParam, 10));
   const session = driver.session();
+
   try {
     const result = await session.run(
       `
-        MATCH (c:Campaign { name: $name })
+        MATCH (c:Campaign { id: $id })
         RETURN c.like AS like
       `,
-      { name }
+      { id }
     );
 
     let likeCount = 0;
@@ -37,28 +40,32 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/campaigndetaillike  { name: string, action: 'increment' | 'decrement' }
+// POST /api/campaigndetaillike  { id: number, action: 'increment' | 'decrement' }
 export async function POST(request: Request) {
   const body = await request.json();
-  const { name, action } = body as { name?: string; action?: string };
-  if (!name || !action || !["increment", "decrement"].includes(action)) {
+  const { id: rawId, action } = body as { id?: number; action?: string };
+
+  if (!rawId || !action || !["increment", "decrement"].includes(action)) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
+  const id = int(rawId);
+  const delta = action === "increment" ? 1 : -1;
+
   const session = driver.session();
   try {
-    const delta = action === "increment" ? 1 : -1;
     const result = await session.run(
       `
-        MATCH (c:Campaign { name: $name })
+        MATCH (c:Campaign { id: $id })
         SET c.like = coalesce(c.like, 0) + $delta
         RETURN c.like AS like
       `,
-      { name, delta: int(delta) }
+      { id, delta: int(delta) }
     );
 
     const raw = result.records[0].get("like");
     const newCount = isInt(raw) ? raw.toNumber() : (raw as number) || 0;
+
     return NextResponse.json({ like: newCount });
   } catch (error) {
     console.error("❌ POST /api/campaigndetaillike error:", error);

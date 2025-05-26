@@ -34,10 +34,19 @@ interface Party {
     link?: string | null;
   }
 
+interface RelatedProject {
+  id: string;
+  name: string;
+  description: string;
+}
+
+
 const PolicyDetailPage = () => {
   const router = useRouter();
   const params = useParams();
-  const name = decodeURIComponent(params.name as string);
+    const policyId = decodeURIComponent(params.id   as string);
+  // เพิ่ม state สำหรับเก็บชื่อ (name) ที่แปลงมาจาก id
+  const [name, setName] = useState<string>("");
   const [showModal, setShowModal] = useState<boolean>(false);
 
   const [policyName, setPolicyName] = useState("");
@@ -64,7 +73,7 @@ const PolicyDetailPage = () => {
     "ดำเนินการ": { label: "ดำเนินการ", color: "#64C2C7", step: 4 },
     "ประเมินผล": { label: "ประเมินผล", color: "#33828D", step: 5 },
   };
-  const [relatedProjects, setRelatedProjects] = useState<{ name: string; description: string }[]>([]);
+const [relatedProjects, setRelatedProjects] = useState<RelatedProject[]>([]);
   const [party, setParty] = useState<Party | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string>("");
    // เตรียม state สำหรับ URLs ของแกลเลอรี
@@ -122,13 +131,14 @@ useEffect(() => {
     }
   }, [bannerUrl]);
 
+
   useEffect(() => {
-
+     if (!policyId) return;
     type AchievementData = { name: string; description: string };
-
+    
     const fetchNeo4j = async () => {
       try {
-        const res = await fetch(`/api/policydetail/${encodeURIComponent(name)}`);
+        const res = await fetch(`/api/policydetail/${encodeURIComponent(policyId)}`);
         const data = await res.json();
         setPolicyName(data.name || name);
         setDescription(data.description || "");
@@ -136,9 +146,12 @@ useEffect(() => {
         setRelatedProjects(data.relatedProjects || []); // ✅ set โครงการ
         setParty(data.party || null);
 
+        const isLikedLocal = localStorage.getItem(`liked_policy_${policyId}`) === "true";
+  setIsLiked(isLikedLocal);
+
  // ดึง banner URL จาก API เซิฟเวอร์
   // เรียก API /api/banner/[name] ให้ฝั่งเซิร์ฟเวอร์คืน URL ที่พร้อมใช้
- const res2 = await fetch(`/api/banner/${encodeURIComponent(data.name)}`);
+ const res2 = await fetch(`/api/banner/${policyId}`);
     if (res2.ok) {
       // อ่านเป็น plain text แทน JSON
       const url = await res2.text();
@@ -154,10 +167,11 @@ useEffect(() => {
         console.error("Neo4j error:", error);
       }
     };
-  
+  console.log("🎯 policyId", policyId, typeof policyId);
+
     
     const fetchTimeline = () => {
-        const timelineRef = collection(firestore, "Policy", name, "sequence");
+        const timelineRef = collection(firestore, "Policy", policyId, "sequence");
         onSnapshot(timelineRef, (snapshot) => {
           const items: TimelineItem[] = snapshot.docs.map((doc) => doc.data() as TimelineItem);
       
@@ -191,9 +205,9 @@ useEffect(() => {
       
   
     const fetchAchievements = async () => {
-      const processRef = doc(firestore, "Policy", name, "achievement", "เชิงกระบวนการ");
-      const policyRef = doc(firestore, "Policy", name, "achievement", "เชิงการเมือง");
-      const projectRef = doc(firestore, "Policy", name, "achievement", "เชิงโครงการ");
+      const processRef = doc(firestore, "Policy", policyId, "achievement", "เชิงกระบวนการ");
+      const policyRef = doc(firestore, "Policy", policyId, "achievement", "เชิงการเมือง");
+      const projectRef = doc(firestore, "Policy", policyId, "achievement", "เชิงโครงการ");
   
       const [processSnap, policySnap, projectSnap] = await Promise.all([
         getDoc(processRef),
@@ -222,7 +236,7 @@ useEffect(() => {
     fetchAchievements();
 
      // 🔴 2. ดึงจำนวน like จาก API หลังจาก fetchNeo4j()
-   fetch(`/api/policylike?name=${encodeURIComponent(name)}`)
+   fetch(`/api/policylike?id=${policyId}`)
      .then((res) => res.json())
      .then((data) => {
        const raw = data.like;
@@ -232,8 +246,8 @@ useEffect(() => {
        setLikeCount(count || 0);
      });
    // 🔴 init isLiked จาก localStorage (จะได้เก็บสถานะคนกดแต่ละเครื่อง)
-   setIsLiked(localStorage.getItem(`liked_${name}`) === "true"); // 🔴 2. ดึงจำนวน like จาก API หลังจาก fetchNeo4j()
-   fetch(`/api/policylike?name=${encodeURIComponent(name)}`)
+   
+   fetch(`/api/policylike?id=${policyId}`)
      .then((res) => res.json())
      .then((data) => {
        const raw = data.like;
@@ -243,8 +257,8 @@ useEffect(() => {
        setLikeCount(count || 0);
      });
    // 🔴 init isLiked จาก localStorage (จะได้เก็บสถานะคนกดแต่ละเครื่อง)
-   setIsLiked(localStorage.getItem(`liked_${name}`) === "true");
-  }, [name]);
+   
+  }, [policyId]);
 
   const handleLike = async () => {
     const action = isLiked ? "decrement" : "increment";
@@ -252,7 +266,8 @@ useEffect(() => {
       const res = await fetch("/api/policylike", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: policyName, action }),
+        body: JSON.stringify({ id: Number(policyId), action }),
+
       });
       if (!res.ok) throw new Error(`Status ${res.status}`);
       const data = await res.json();
@@ -267,7 +282,7 @@ useEffect(() => {
 
       const newVal = !isLiked;
       setIsLiked(newVal);
-      localStorage.setItem(`liked_${policyName}`, newVal.toString());
+      localStorage.setItem(`liked_policy_${policyId}`, newVal.toString());
     } catch (err) {
       console.error("❌ handleLike error:", err);
     }
@@ -276,8 +291,8 @@ useEffect(() => {
  // ดึง list ของไฟล์ในโฟลเดอร์ policy/picture/[name]
 
  useEffect(() => {
-  console.log("🔎 Policy folder path:", `policy/picture/${name}`);
-  const folderRef = ref(storage, `policy/picture/${name}`);
+  console.log("🔎 Policy folder path:", `policy/picture/${policyId}`);
+  const folderRef = ref(storage, `policy/picture/${policyId}`);
   listAll(folderRef)
     .then(res => {
       console.log("✅ listAll items:", res.items.map(i => i.fullPath));
@@ -288,7 +303,8 @@ useEffect(() => {
       setGalleryUrls(urls);
     })
     .catch(err => console.error("❌ load gallery error:", err));
-}, [name]);
+}, [policyId]);
+
 
   return (
     <div className="font-prompt">
@@ -548,7 +564,7 @@ useEffect(() => {
       .map((project) => (
         <Link
           key={project.name}
-          href={`/campaigndetail/${encodeURIComponent(project.name)}`}
+          href={`/campaigndetail/${encodeURIComponent(project.id)}`}
           className="no-underline"
         >
           <div className="border border-gray-300 bg-white rounded-xl p-4 hover:shadow-md transition cursor-pointer h-full">

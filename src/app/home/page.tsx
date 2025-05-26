@@ -8,12 +8,15 @@ import { firestore } from "@/app/lib/firebase";
 import { doc, getDoc, collection, onSnapshot } from "firebase/firestore";
 import Step from "@/app/components/step";
 import { useRouter } from "next/navigation";
+import DashboardSection from "@/app/components/DashboardSection";
 
 
   interface Policy {
     name: string;
     description: string;
     partyName: string;
+    status: string; 
+     id: string;
   }
   
   interface Category {
@@ -34,9 +37,14 @@ import { useRouter } from "next/navigation";
     const prevCard = () => {
       setCurrentIndex(prev => Math.max(prev - 1, 0));
     };
+    const [selectedParty, setSelectedParty] = useState<string>("");
+    const partyOptions = Array.from(
+    new Set(categories.flatMap(cat => cat.policies.map(p => p.partyName)))
+  );
     
   const [policies, setPolicies] = useState<any[]>([]);
-  
+  const router = useRouter();
+
   const fetchPolicies = async () => {
     try {
       const res = await fetch("/api/policy");
@@ -147,40 +155,25 @@ useEffect(() => {
   return (
     <div
       className="font-prompt relative min-h-screen bg-cover bg-center"
-      style={{ backgroundImage: "url('/bg/หัวข้อ.png')" }}
+      style={{ backgroundImage: "url('/bg/dashbg.png')" }}
     >
       <Navbar />
         {/* เอา bg-white ออก ให้ main ไม่มี padding */}
       <main className="w-full m-0 p-0">
         {/* section นี้กำหนด bg เป็นสีเดียวกับ wrapper */}
       <section className="w-full m-0 p-10 ">
-        <iframe
-          title="หน้าหลัก"
-          className="w-full h-[90vh] border-0 block"
-          src={
-            "https://app.powerbi.com/reportEmbed?" +
-            "reportId=80eb8db3-cdc4-4146-b2df-354a276532a3" +
-            "&autoAuth=true" +
-            "&ctid=0a43deb9-efb0-4f46-8594-71899230fda6" +
-            "&actionBarEnabled=false" +        // ปิดแถบเมนูบน
-            "&filterPaneEnabled=false" +       // ปิดแผงกรอง
-            "&navContentPaneEnabled=false" +   // ปิดแผงเนวิเกชัน
-            "&pageView=fitToWidth"             // ปรับให้เต็มความกว้าง
-          }
-          frameBorder="0"
-          allowFullScreen
-        />
+         <DashboardSection />
       </section>
 
 {/* Example Section */}
-<section className="example-container bg-white shadow-md p-6 mb-6 h-[700px]">
-  <h2 className="text-3xl font-semibold mt-4 text-[#5D5A88] mb-4 text-center">
+<section className="example-container bg-white shadow-md p-6 mb-6 h-[720px]">
+  <h2 className="text-3xl font-semibold mt-3 text-[#5D5A88] mb-3 text-center">
     สัญลักษณ์แทนขั้นความคืบหน้า
   </h2>
   
-  <div className="example-content-1 flex items-center justify-center mb-8">
+  <div className="example-content-1 flex items-center justify-center mb-4">
     {/* สัญลักษณ์ */}
-    <div className="flex flex-wrap justify-center gap-4 mt-4">
+    <div className="flex flex-wrap justify-center gap-4 mt-3 mb-3 ">
       {Object.values(stepMap).map((stepObj, idx) => (
         <Step
           key={idx}
@@ -192,9 +185,24 @@ useEffect(() => {
     </div>
   </div>
   
-  <h2 className="text-3xl font-semibold text-[#5D5A88] mt-4 mb-4 text-center">
+  <h2 className="text-3xl font-semibold text-[#5D5A88]  mt-3 mb-1 text-center">
             ตัวอย่างนโยบายต่างๆแบ่งตามหมวดหมู่
     </h2>
+
+       {/* ► ตัวกรองพรรค ใกล้กับ Example Section ► */}
+ <div className="flex justify-center mt-3 mb-1 ">
+   <select
+     value={selectedParty}
+     onChange={e => setSelectedParty(e.target.value)}
+     className="border rounded-md px-3 py-2 text-[#5D5A88]"
+   >
+     <option value="">ร่วมรัฐบาล</option>
+     {partyOptions.map(name => (
+       <option key={name} value={name}>{name}</option>
+     ))}
+   </select>
+ </div>
+
   <div className="example-content-2 flex items-center justify-center space-x-20">
       <button
       onClick={prevCard}
@@ -205,51 +213,75 @@ useEffect(() => {
 
 
     <div className="flex space-x-10 mt-4">
-      {visibleCards.map((category, idx) => (
-        <div
-          key={idx}
-          className=" w-[600px] h-[330px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between"
-        >
-          <div>
-            <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
-              {category.name}
-              <span className="text-xl text-gray-400 ml-2 font-normal">
-                (มีทั้งหมด {category.policies.length} นโยบาย)
-            </span>
-            </h3>
-            <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
-            {category.policies.slice(0, 5).map((p, i) => {
-                const encodedPartyName = encodeURIComponent(p.partyName);
-                const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
+      {visibleCards.map((category, idx) => {
+     const displayPolicies = selectedParty
+       ? category.policies.filter(p => p.partyName === selectedParty)
+       : category.policies;
+       
+     return (
+ <div
+   key={idx}
+   className="
+     w-[600px] h-[330px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88]
+     p-4 flex flex-col justify-between
+     cursor-pointer transform transition-transform duration-200
+     hover:scale-105
+   "
+ >         <div>
+           <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
+             {category.name}
+             <span className="text-xl text-gray-400 ml-2 font-normal">
+               (มีทั้งหมด {displayPolicies.length} นโยบาย)
+             </span>
+           </h3>
 
-                return (
-                <li key={i} className="flex justify-between items-center border-b pb-1">
-                    <span className="truncate">{p.name}</span>
-                    <img
-                    src={logoUrl}
-                    alt={`โลโก้ของ ${p.partyName}`}
-                    className="w-6 h-6 object-contain ml-3"
-                    onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/default-logo.jpg";
-                    }}
-                    />
-                </li>
-                );
-            })}
-            </ul>
-          </div>
+           
+    <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
+  {displayPolicies.slice(0, 5).map((p, i) => {
+    const encodedPartyName = encodeURIComponent(p.partyName);
+    const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
+    return (
 
-          <div className="text-right mt-2">
-            <Link
-              href={`/policycategory/${encodeURIComponent(category.name)}`}
-              className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
+       <li
+   key={i}
+   className="flex items-center border-b pb-1 cursor-pointer transition-colors hover:bg-gray-100"
+   onClick={() => router.push(`/policydetail/${p.id}`)}  //คลิ๊กนโยบาย
+ >
+        <div className="flex items-center space-x-2 flex-1">
+          {stepMap[p.status] && (
+            <div
+              className="w-6 h-6 flex items-center justify-center rounded-full text-white text-sm font-semibold"
+              style={{ backgroundColor: stepMap[p.status].color }}
             >
-              ดูเพิ่มเติม &rarr;
-            </Link>
-          </div>
+              {stepMap[p.status].step}
+            </div>
+          )}
+          <span className="flex-1 truncate text-left">{p.name}</span>
         </div>
-      ))}
-    </div>
+        <img
+          src={logoUrl}
+          alt={`โลโก้ของ ${p.partyName}`}
+          className="w-6 h-6 object-contain ml-3"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = "/default-logo.jpg";
+          }}
+        />
+      </li>
+    );
+  })}
+</ul>
+</div>
+
+         <div className="text-right mt-2">
+           <Link href={`/policycategory/${encodeURIComponent(category.name)}`} className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]">
+             ดูเพิ่มเติม &rarr;
+           </Link>
+         </div>
+       </div>
+        
+     );
+      
+})}  </div>
 
     <button
       onClick={nextCard}
@@ -270,8 +302,7 @@ useEffect(() => {
   <div className="flex space-x-10 mt-10 justify-center">
 
         {/* Left card: แสดง 5 นโยบายยอดนิยม */}
-        <div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between">
-      <div>
+<div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between transition-transform hover:scale-105">      <div>
         <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
           นโยบายที่ได้รับความสนใจสูงสุด
         </h3>

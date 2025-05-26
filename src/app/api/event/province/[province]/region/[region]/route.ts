@@ -6,7 +6,7 @@ export async function GET(
   req: NextRequest,
   context: { params: { province: string; region: string } }
 ) {
-  const { province, region } = await context.params; // ✅ await ที่นี่
+  const { province, region } = await context.params;
   const decodedProvince = decodeURIComponent(province);
   const decodedRegion = decodeURIComponent(region);
 
@@ -19,20 +19,26 @@ export async function GET(
         MATCH (p)-[:IN_REGION]->(r:Region {name: $region})
       }
       OPTIONAL MATCH (e)-[:ORGANIZED_BY]->(party:Party)
-      RETURN e.name AS name,
-             e.description AS description,
-             e.date AS date,
-             e.time AS time,
-             e.location AS location,
-             party.name AS party,
-             $province AS province,
-             $region AS region
+      RETURN 
+        e.id AS id,
+        e.name AS name,
+        e.description AS description,
+        e.date AS date,
+        e.time AS time,
+        e.location AS location,
+        party.name AS party,
+        $province AS province,
+        $region AS region
       ORDER BY e.date DESC
       `,
-      { province, region }
+      { province: decodedProvince, region: decodedRegion }
     );
 
     const events = result.records.map((record) => ({
+      id:
+        typeof record.get("id")?.toNumber === "function"
+          ? record.get("id").toNumber()
+          : record.get("id"),
       name: record.get("name"),
       description: record.get("description"),
       date: record.get("date"),

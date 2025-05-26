@@ -15,6 +15,7 @@ export default function PRPolicyForm() {
   const [policyName, setPolicyName] = useState<string>("");
   const [policyCategory, setPolicyCategory] = useState("เศรษฐกิจ");
   const [policyDes, setPolicyDes] = useState("");
+  const [policyStatus, setPolicyStatus] = useState("เริ่มนโยบาย");
   const [policyBanner, setPolicyBanner] = useState<File | null>(null);
   const [policyPDF, setPolicyPDF] = useState<File | null>(null);
   const [partyName, setPartyName] = useState("ไม่ทราบชื่อพรรค");
@@ -227,13 +228,14 @@ export default function PRPolicyForm() {
 
     let bannerUrl = "";
     try {
-      
+
 
       const payload = {
         ...(policyId && { id: policyId }),
         name: policyName,
         description: policyDes,
         banner: bannerUrl,
+         status: policyStatus,
         category: policyCategory,
         party: partyName,
       };
@@ -255,15 +257,15 @@ export default function PRPolicyForm() {
       const idStr = idUsed.toString();
 
       if (policyBanner) {
-  const bannerRef = ref(storage, `policy/banner/${idUsed}.jpg`);
-  await uploadBytes(bannerRef, policyBanner);
-  bannerUrl = await getDownloadURL(bannerRef);
-}
+        const bannerRef = ref(storage, `policy/banner/${idUsed}.jpg`);
+        await uploadBytes(bannerRef, policyBanner);
+        bannerUrl = await getDownloadURL(bannerRef);
+      }
 
-if (policyPDF) {
-  const pdfRef = ref(storage, `policy/reference/${idUsed}.pdf`);
-  await uploadBytes(pdfRef, policyPDF);
-}
+      if (policyPDF) {
+        const pdfRef = ref(storage, `policy/reference/${idUsed}.pdf`);
+        await uploadBytes(pdfRef, policyPDF);
+      }
       // ✅ ใช้ idUsed สำหรับ Firebase Storage และ Firestore
       await setDoc(doc(firestore, "Policy", idStr, "achievement", "เชิงกระบวนการ"), {
         name: "เชิงกระบวนการ",
@@ -346,7 +348,7 @@ if (policyPDF) {
 
 
   return (
-    <div className="min-h-screen bg-[#9795B5] flex">
+    <div className="min-h-screen bg-cover bg-center flex" style={{ backgroundImage: "url('/bg/ผีเสื้อ.jpg')" }}>
       <PRSidebar />
       <div className="flex-1 md:ml-64">
         <header className="bg-white p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
@@ -366,7 +368,7 @@ if (policyPDF) {
           <div className="mt-6 bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto">
             <form onSubmit={handleSubmit} className="space-y-4">
               <label className="block font-bold">ชื่อนโยบาย:</label>
-              <input type="text" value={policyName} onChange={(e) => setPolicyName(e.target.value)} required disabled={!!policyId} className="w-full p-2 border border-gray-300 rounded-md" />
+              <input type="text" value={policyName} onChange={(e) => setPolicyName(e.target.value)} required disabled={!!policyId} placeholder="รถไฟฟ้า 20 บาทตลอดสาย" className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">หมวดหมู่นโยบาย:</label>
               <select value={policyCategory} onChange={(e) => setPolicyCategory(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-md">
@@ -375,16 +377,33 @@ if (policyPDF) {
               </select>
 
               <label className="block font-bold">รายละเอียดนโยบาย:</label>
-              <textarea value={policyDes} onChange={(e) => setPolicyDes(e.target.value)} rows={5} required className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={policyDes} onChange={(e) => setPolicyDes(e.target.value)} rows={5} required 
+              placeholder="นโยบายรถไฟฟ้า 20 บาทตลอดสาย (หรือ การปรับลดค่าโดยสารรถไฟฟ้าสูงสุดไม่เกิน 20 บาท) เป็นหนึ่งในนโยบายปฏิบัติการเร่งรัด (Quick Win) ของรัฐบาลในด้าน “คมนาคม เพื่อความอุดมสุขของประชาชน” เพื่อช่วยลดภาระค่าครองชีพให้แก่ประชาชน" 
+              className="w-full p-2 border border-gray-300 rounded-md" />
+
+              <label className="block font-bold">สถานะนโยบาย:</label>
+              <select
+                value={policyStatus}
+                onChange={(e) => setPolicyStatus(e.target.value)}
+                required
+                className="w-full p-2 border border-gray-300 rounded-md"
+              >
+                <option value="เริ่มนโยบาย">เริ่มนโยบาย</option>
+                <option value="วางแผน">วางแผน</option>
+                <option value="ตัดสินใจ">ตัดสินใจ</option>
+                <option value="ดำเนินการ">ดำเนินการ</option>
+                <option value="ประเมินผล">ประเมินผล</option>
+              </select>
+
 
               <label className="block font-bold">ความสำเร็จเชิงกระบวนการ:</label>
-              <textarea value={achievementProcess} onChange={(e) => setAchievementProcess(e.target.value)} rows={2} className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={achievementProcess} onChange={(e) => setAchievementProcess(e.target.value)} rows={2} placeholder="ต้องออกพระราชบัญญัติการบริหารจัดการระบบตั๋วร่วม พ.ศ. ...." className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">ความสำเร็จเชิงการเมือง:</label>
-              <textarea value={achievementPolicy} onChange={(e) => setAchievementPolicy(e.target.value)} rows={2} className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={achievementPolicy} onChange={(e) => setAchievementPolicy(e.target.value)} rows={2} placeholder="กำหนดอัตราราคาค่าบริการในราคาถูก" className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">ความสำเร็จเชิงโครงการ:</label>
-              <textarea value={achievementProject} onChange={(e) => setAchievementProject(e.target.value)} rows={2} className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={achievementProject} onChange={(e) => setAchievementProject(e.target.value)} rows={2} placeholder="ภายใน 2 ปี (เดือนก.ย. 2568)" className="w-full p-2 border border-gray-300 rounded-md" />
 
               {/* ลำดับเหตุการณ์ */}
               <label className="block font-bold mt-6">ลำดับเหตุการณ์ (Timeline):</label>
@@ -426,7 +445,7 @@ if (policyPDF) {
 
                     <input
                       type="text"
-                      placeholder="ชื่อเหตุการณ์"
+                      placeholder="กล่าวต่อที่ประชุมสภา"
                       value={item.name}
                       onChange={(e) => {
                         const newItems = [...timelineItems];
@@ -465,7 +484,7 @@ if (policyPDF) {
 
 
                     <textarea
-                      placeholder="คำอธิบายเหตุการณ์"
+                      placeholder="สุริยะ จึงรุ่งเรืองกิจ รมว.คมนาคม กล่าวต่อที่ประชุมสภา นโยบายรถไฟฟ้า 20 บาทตลอดสาย นำร่องสายสีแดง-ม่วง ภายใน 3 เดือน และส่วนที่เหลือ ภายใน 2 ปี"
                       value={item.description}
                       onChange={(e) => {
                         const newItems = [...timelineItems];

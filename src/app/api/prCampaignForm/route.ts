@@ -78,7 +78,6 @@ console.log("🎯 req.body =", { name, partyId, policyId });
            description: $description,
            status: $status,
            progress: $progress,
-           banner: $banner,
            area: $area,
            impact: $impact,
            size: $size
@@ -123,7 +122,6 @@ console.log("🎯 req.body =", { name, partyId, policyId });
           c.description = $description,
           c.status = $status,
           c.progress = $progress,
-          c.banner = $banner,
           c.area = $area,
           c.impact = $impact,
           c.size = $size
