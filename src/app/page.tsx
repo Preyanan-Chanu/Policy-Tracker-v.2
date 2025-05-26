@@ -154,7 +154,8 @@ useEffect(() => {
 
   return (
     <div
-      className="font-prompt relative min-h-screen bg-cover bg-center"  style={{ backgroundImage: "url('/bg/dashbg.png')",}}
+      className="font-prompt relative min-h-screen bg-cover bg-center"
+      style={{ backgroundImage: "url('/bg/dashbg.png')" }}
     >
       <Navbar />
         {/* เอา bg-white ออก ให้ main ไม่มี padding */}
@@ -301,8 +302,7 @@ useEffect(() => {
   <div className="flex space-x-10 mt-10 justify-center">
 
         {/* Left card: แสดง 5 นโยบายยอดนิยม */}
-<div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between transition-transform hover:scale-105">      
-  <div>
+<div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between transition-transform hover:scale-105">      <div>
         <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
           นโยบายที่ได้รับความสนใจสูงสุด
         </h3>

@@ -17,6 +17,7 @@ interface PartyInfo {
 
 interface Member {
   id: string;
+  prefix: string; 
   name: string;
   surname: string;
   role: string;
@@ -88,11 +89,12 @@ export default function PRPartyInfo() {
             } catch { }
 
             return {
-              id,
-              name: member.FirstName,
-              surname: member.LastName,
-              role: member.Role,
-              image: pictureUrl,
+               id,
+  prefix: member.Prefix || "", // ← เพิ่ม
+  name: member.FirstName,
+  surname: member.LastName,
+  role: member.Role,
+  image: pictureUrl,
             };
           })
         );
@@ -216,7 +218,7 @@ const pngRef = ref(storage, `party/member/${partyName}/${id}.png`);
             {members.map((member) => (
               <div key={member.id} className="bg-white p-4 rounded-lg shadow-lg text-center">
                 <img src={member.image} alt={member.name} className="w-24 h-24 mx-auto rounded-full shadow-md" />
-                <p className="mt-2 font-semibold">{member.name} {member.surname}</p>
+                <p className="mt-2 font-semibold">{member.prefix} {member.name} {member.surname}</p>
                 <p className="text-gray-600">{member.role}</p>
                 <div className=" mt-4">
                 <button

@@ -15,6 +15,8 @@ export default function PRMemberForm() {
   const [memberPic, setMemberPic] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [partyName, setPartyName] = useState("ไม่ทราบชื่อพรรค");
+  const [memberPrefix, setMemberPrefix] = useState("");
+
   const router = useRouter();
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function PRMemberForm() {
   }
 
   const fileExt = memberPic.name.split(".").pop()?.toLowerCase() === "png" ? "png" : "jpg";
-  const fullName = `${memberName.trim()}_${memberSurname.trim()}`;
+  const fullName = `${memberPrefix}_${memberName}_${memberSurname}`.replace(/\s+/g, "_");
   const firestorePath = `Party/${partyName}/Member`;
 
   try {
@@ -66,6 +68,7 @@ export default function PRMemberForm() {
     // ✅ บันทึกข้อมูล Firestore โดยใช้ fullName เป็น documentId
     const docRef = doc(firestore, firestorePath, String(newId));
     await setDoc(docRef, {
+       Prefix: memberPrefix,
       FirstName: memberName,
       LastName: memberSurname,
       Role: memberRole,
@@ -92,12 +95,28 @@ export default function PRMemberForm() {
 
         <main className="p-6">
           <h2 className="text-3xl text-white text-center mb-6">เพิ่มข้อมูลสมาชิก</h2>
+
+          
+
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto">
             <form onSubmit={handleSubmit} className="space-y-4">
+
+              <div>
+  <label className="block font-bold">คำนำหน้า / ยศ:</label>
+  <input
+    type="text"
+    placeholder="เช่น ทพญ., นายแพทย์, ศ.ดร."
+    value={memberPrefix}
+    onChange={(e) => setMemberPrefix(e.target.value)}
+    className="w-full p-2 border rounded-md"
+    required
+  />
+</div>
               <div>
                 <label className="block font-bold">ชื่อ:</label>
                 <input
                   type="text"
+                  placeholder="สรรพวิชช์"
                   value={memberName}
                   onChange={(e) => setMemberName(e.target.value)}
                   className="w-full p-2 border rounded-md"
@@ -109,6 +128,7 @@ export default function PRMemberForm() {
                 <label className="block font-bold">นามสกุล:</label>
                 <input
                   type="text"
+                  placeholder="ช่องดารากุล"
                   value={memberSurname}
                   onChange={(e) => setMemberSurname(e.target.value)}
                   className="w-full p-2 border rounded-md"
@@ -120,6 +140,7 @@ export default function PRMemberForm() {
                 <label className="block font-bold">ตำแหน่ง:</label>
                 <input
                   type="text"
+                  placeholder="หัวหน้าพรรค"
                   value={memberRole}
                   onChange={(e) => setMemberRole(e.target.value)}
                   className="w-full p-2 border rounded-md"
