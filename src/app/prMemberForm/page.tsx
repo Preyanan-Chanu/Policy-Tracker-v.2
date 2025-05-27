@@ -16,8 +16,22 @@ export default function PRMemberForm() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [partyName, setPartyName] = useState("ไม่ทราบชื่อพรรค");
   const [memberPrefix, setMemberPrefix] = useState("");
+  const [partyId, setPartyId] = useState<string | null>(null);
+
 
   const router = useRouter();
+
+  useEffect(() => {
+  const name = localStorage.getItem("partyName");
+  const id = localStorage.getItem("partyId");
+  if (name && id) {
+    setPartyName(name);
+    setPartyId(id);
+  } else {
+    alert("กรุณาเข้าสู่ระบบใหม่");
+    router.push("/login");
+  }
+}, []);
 
   useEffect(() => {
     const party = localStorage.getItem("partyName");
@@ -46,7 +60,7 @@ export default function PRMemberForm() {
 
   const fileExt = memberPic.name.split(".").pop()?.toLowerCase() === "png" ? "png" : "jpg";
   const fullName = `${memberPrefix}_${memberName}_${memberSurname}`.replace(/\s+/g, "_");
-  const firestorePath = `Party/${partyName}/Member`;
+  const firestorePath = `Party/${partyId}/Member`;
 
   try {
     // ✅ ดึง collection และคำนวณ id ใหม่
@@ -61,20 +75,20 @@ export default function PRMemberForm() {
     const newId = maxId + 1;
 
     // ✅ Upload Image ด้วยชื่อ id
-    const imageRef = ref(storage, `party/member/${partyName}/${newId}.${fileExt}`);
+    const imageRef = ref(storage, `party/member/${partyId}/${newId}.${fileExt}`);
     await uploadBytes(imageRef, memberPic);
     const imageUrl = await getDownloadURL(imageRef);
 
     // ✅ บันทึกข้อมูล Firestore โดยใช้ fullName เป็น documentId
     const docRef = doc(firestore, firestorePath, String(newId));
     await setDoc(docRef, {
-       Prefix: memberPrefix,
-      FirstName: memberName,
-      LastName: memberSurname,
-      Role: memberRole,
-      Picture: `/member/${newId}.${fileExt}`,
-      id: newId,
-    });
+  Prefix: memberPrefix,
+  FirstName: memberName,
+  LastName: memberSurname,
+  Role: memberRole,
+  Picture: `/member/${newId}.${fileExt}`, // หรือเก็บเป็น URL จริงก็ได้
+  id: newId,
+});
 
     alert("✅ บันทึกข้อมูลสมาชิกสำเร็จ");
     router.push("/prPartyInfo");

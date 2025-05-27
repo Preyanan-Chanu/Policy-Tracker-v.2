@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import AdminSidebar from "@/app/components/AdminSidebar";
+import { signOut } from "firebase/auth";
+import { auth } from "@/app/lib/firebase";
 
 
 export default function AdminHomePage() {
@@ -38,11 +39,15 @@ export default function AdminHomePage() {
         </button>
 
         <button
-          onClick={() => router.push("/login")}
-          className="bg-white text-[#5D5A88] font-semibold px-6 py-4 rounded-lg shadow hover:bg-gray-100 transition"
-        >
-          ออกจากระบบ
-        </button>
+  onClick={async () => {
+    await signOut(auth);         
+    localStorage.clear();        
+    router.push("/login");       
+  }}
+  className="bg-white text-[#5D5A88] font-semibold px-6 py-4 rounded-lg shadow hover:bg-gray-100 transition"
+>
+  ออกจากระบบ
+</button>
       </div>
     </div>
   );

@@ -25,38 +25,36 @@ export default function AdminCreatePartyPage() {
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
+  e.preventDefault();
+  setSubmitting(true);
 
-    try {
-      // 1) ส่งข้อมูลไปยัง API เพื่อสร้างใน PostgreSQL + Neo4j
-      const res = await fetch("/api/admin/party", {
-        method: "POST",
-        body: JSON.stringify({ name, description, link }),
-        headers: { "Content-Type": "application/json" },
-      });
+  try {
+    // 1) ส่งข้อมูลไปยัง API เพื่อสร้างใน PostgreSQL + Neo4j
+    const res = await fetch("/api/admin/party", {
+      method: "POST",
+      body: JSON.stringify({ name, description, link }),
+      headers: { "Content-Type": "application/json" },
+    });
 
-      if (!res.ok) throw new Error("เพิ่มพรรคไม่สำเร็จ");
-      const { id } = await res.json(); // รับ id กลับมาเพื่อเก็บ logo
+    if (!res.ok) throw new Error("เพิ่มพรรคไม่สำเร็จ");
+    const { id } = await res.json(); // ✅ รับ id กลับมาเพื่อใช้เป็นชื่อโลโก้
 
-      // 2) อัปโหลดโลโก้
-      if (logoFile) {
-         const storageRef = ref(storage, `party/logo/${name}.png`);
-  await uploadBytes(storageRef, logoFile); 
-  const url = await getDownloadURL(storageRef);
-
-
-      }
-
-      alert("✅ เพิ่มพรรคสำเร็จ");
-      router.push("/admin/party");
-    } catch (err) {
-      alert("❌ เกิดข้อผิดพลาด");
-      console.error(err);
-    } finally {
-      setSubmitting(false);
+    // 2) อัปโหลดโลโก้โดยใช้ id แทน name
+    if (logoFile) {
+      const storageRef = ref(storage, `party/logo/${id}.png`);
+      await uploadBytes(storageRef, logoFile);
+      await getDownloadURL(storageRef); // ไม่ใช้ต่อก็ไม่ต้องเซ็ต
     }
-  };
+
+    alert("✅ เพิ่มพรรคสำเร็จ");
+    router.push("/admin/party");
+  } catch (err) {
+    alert("❌ เกิดข้อผิดพลาด");
+    console.error(err);
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-[#9795B5] flex items-center justify-center text-white px-4">
@@ -67,6 +65,7 @@ export default function AdminCreatePartyPage() {
           <label className="block font-semibold mb-1">ชื่อพรรค</label>
           <input
             value={name}
+            placeholder="เพื่อไทย (ไม่ต้องใส่ 'พรรค' หรือ 'พรรคการเมือง')"
             onChange={(e) => setName(e.target.value)}
             className="w-full border px-3 py-2 rounded"
             required
@@ -77,6 +76,7 @@ export default function AdminCreatePartyPage() {
           <label className="block font-semibold mb-1">รายละเอียด</label>
           <textarea
             value={description}
+            placeholder="รายละเอียดเกี่ยวกับพรรค เช่น นโยบายหลัก ประวัติความเป็นมา"
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
             className="w-full border px-3 py-2 rounded"
@@ -88,6 +88,7 @@ export default function AdminCreatePartyPage() {
           <input
             type="url"
             value={link}
+            placeholder="https://www.example.com"
             onChange={(e) => setLink(e.target.value)}
             className="w-full border px-3 py-2 rounded"
           />

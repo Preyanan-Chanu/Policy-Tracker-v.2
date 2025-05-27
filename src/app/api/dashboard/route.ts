@@ -65,6 +65,8 @@ export async function GET(req: NextRequest) {
     `, partyId === "all" ? [] : [partyId]);
     const top3 = top3Res.rows;
 
+    
+
     // คืนค่าให้หน้าบ้าน
     return NextResponse.json({
       policyCount,

@@ -14,7 +14,7 @@ export async function GET(
     const result = await session.run(
       `
       MATCH (p:Party {id: $id})
-      RETURN p { .id, .name, .description, .link, .logo } AS party
+      RETURN p { .id, .name, .description, .link, } AS party
       `,
       { id: decodedId }
     );
@@ -47,7 +47,7 @@ export async function POST(
       SET p.name = $name,
           p.description = $description,
           p.link = $link,
-          p.logo = $logo
+      
       `,
       { id, name, description, link, logo }
     );

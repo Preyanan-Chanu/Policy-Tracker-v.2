@@ -1,26 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 
-// 👉 GET: ดึงข้อมูลพรรคตาม id
-export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+// ─── GET: ดึงข้อมูลพรรคตาม id ─────────────────────
+export async function GET(
+  req: NextRequest,
+  context: { params: { id: string } }
+) {
   const { id } = await context.params;
-  const idNumber = parseInt(id);
+  const idNumber = parseInt(id, 10);
 
   if (isNaN(idNumber)) {
     return NextResponse.json({ error: "ID ไม่ถูกต้อง" }, { status: 400 });
   }
 
-
-
   const session = driver.session();
-
   try {
     const result = await session.run(
       `
       MATCH (p:Party {id: $id})
-      RETURN p.name AS name, p.description AS description, p.link AS link, p.logo AS logo
+      RETURN p.name AS name, p.description AS description, p.link AS link
       `,
-      { id: idNumber}
+      { id: idNumber }
     );
 
     if (result.records.length === 0) {
@@ -32,7 +32,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       name: record.get("name"),
       description: record.get("description"),
       link: record.get("link"),
-      logo: record.get("logo"), // ✅ เพิ่ม logo
     });
   } catch (error) {
     console.error("❌ Error fetching party by id:", error);
@@ -42,31 +41,30 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   }
 }
 
-// 👉 POST: แก้ไขข้อมูลพรรค (name, description, link, logo)
-export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+// ─── POST: อัปเดตข้อมูลพรรค ───────────────────────
+export async function POST(
+  req: NextRequest,
+  context: { params: { id: string } }
+) {
   const { id } = await context.params;
-  const idNumber = parseInt(id);
+  const idNumber = parseInt(id, 10);
 
   if (isNaN(idNumber)) {
     return NextResponse.json({ error: "ID ไม่ถูกต้อง" }, { status: 400 });
   }
 
-
-
+  const { name, description, link } = await req.json();
 
   const session = driver.session();
-  const { name, description, link, logo } = await req.json(); // ✅ รับ logo
-
   try {
     await session.run(
       `
-      MERGE (p:Party {id: $id})
+      MATCH (p:Party {id: $id})
       SET p.name = $name,
           p.description = $description,
-          p.link = $link,
-          p.logo = $logo
+          p.link = $link
       `,
-      { id: idNumber, name, description, link, logo }
+      { id: idNumber, name, description, link }
     );
 
     return NextResponse.json({ message: "✅ บันทึกสำเร็จ" });
@@ -77,5 +75,3 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     await session.close();
   }
 }
-
-

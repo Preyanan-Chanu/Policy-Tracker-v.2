@@ -43,7 +43,7 @@ export async function GET(
  // ─── PUT: อัปเดตพรรคตาม id ────────────────────
  export async function PUT(
    request: NextRequest,
-   context: { params: Promise<{ id: string }> }
+   context: { params: { id: string } }
  ) {
    // 1) รอ resolve params.id
    const { id: idStr } = await context.params;
@@ -61,7 +61,7 @@ export async function GET(
       `UPDATE parties 
          SET name = $1      
        WHERE id = $2`,
-      [name, id] 
+      [ name.trim(), id ]
     );
     // อัปเดตใน Neo4j
     await neoSession.run(

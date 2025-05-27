@@ -58,7 +58,8 @@ export default function AdminEditPartyPage() {
 
       // อัปโหลดโลโก้ใหม่ถ้ามี
       if (logoFile) {
-        const storageRef = ref(storage, `party/logo/${encodeURIComponent(name)}.png`);
+        const storageRef = ref(storage, `party/logo/${id}.png`);
+
         await uploadBytes(storageRef, logoFile);
       }
 

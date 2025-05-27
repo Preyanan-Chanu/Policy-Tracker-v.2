@@ -46,8 +46,9 @@ export default function PRPartyInfoForm() {
         setDescription(data.description || "");
         setLink(data.link || "");
         setExistingLogoUrl(
-          `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(data.name)}.png?alt=media`
-        );
+  `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.png?alt=media`
+);
+
       } else {
         setPartyName("");
         setDescription("");
@@ -69,16 +70,16 @@ export default function PRPartyInfoForm() {
     let logoUrl = existingLogoUrl;
     try {
       if (logoFile) {
-        const logoRef = ref(storage, `party/logo/${partyName}.png`);
+        const logoRef = ref(storage, `party/logo/${partyId}.png`);
+
         await uploadBytes(logoRef, logoFile);
-        logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyName)}.png?alt=media`;
+logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.png?alt=media`;
       }
 
       const payload = {
         name: partyName,
         description,
         link,
-        logo: logoUrl,
       };
 
       const res = await fetch(`/api/pr-partyinfo/${partyId}`, {

@@ -61,16 +61,18 @@ const eventId = decodeURIComponent(id as string);
   };
 
   const handleMapLoad = (map: google.maps.Map) => {
-    if ((window as any).google?.maps?.marker?.AdvancedMarkerElement) {
-      const marker = new (window as any).google.maps.marker.AdvancedMarkerElement({
-        map,
-        position: center,
-        title: eventData.name,
-      });
-    } else {
-      console.warn("AdvancedMarkerElement ยังไม่พร้อมใช้งาน");
-    }
-  };
+  if (!isNaN(center.lat) && !isNaN(center.lng)) {
+    new google.maps.Marker({
+      map,
+      position: center,
+      title: eventData.name,
+    });
+  } else {
+    console.warn("⚠️ center lat/lng ไม่ถูกต้อง");
+  }
+};
+
+
 
   return (
     <div className="bg-white text-[#5D5A88] font-prompt">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AdminSidebar from "@/app/components/AdminSidebar";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { storage } from "@/app/lib/firebase";
+import { auth } from "@/app/lib/firebase";
 
 interface Party {
     id: number;
@@ -19,29 +20,40 @@ export default function AdminPartyPage() {
     const router = useRouter();
 
     useEffect(() => {
-        const role = localStorage.getItem("role");
-        if (role !== "admin") {
-            alert("❌ คุณไม่มีสิทธิ์เข้าถึงหน้านี้");
-            router.push("/login");
-        }
-    }, []);
+  const role = localStorage.getItem("role");
+  if (role !== "admin") {
+    alert("❌ คุณไม่มีสิทธิ์เข้าถึงหน้านี้");
+    // ใช้ async logout ด้วยก็ได้
+    import("firebase/auth").then(({ signOut }) => signOut(auth));
+    localStorage.clear();
+    router.replace("/login");
+  }
+}, [router]);
 
     useEffect(() => {
   const fetchParties = async () => {
     const res = await fetch("/api/admin/party");
     const data = await res.json();
 
-    // สร้าง promises สำหรับโหลด logo URL ของแต่ละพรรค
     const enriched = await Promise.all(
       data.map(async (party: Party) => {
+        let logoUrl = "/default-party-logo.png";
         try {
-          const logoRef = ref(storage, `party/logo/${party.name}.png`);
-          const logoUrl = await getDownloadURL(logoRef);
-          return { ...party, logo: logoUrl }; // เพิ่ม logo เข้า object
-        } catch (err) {
-          console.warn("⚠️ โหลดโลโก้ไม่สำเร็จ:", party.name, err);
-          return { ...party, logo: "/default-party-logo.png" }; // fallback
+          const pngRef = ref(storage, `party/logo/${party.id}.png`);
+          logoUrl = await getDownloadURL(pngRef);
+        } catch {
+          try {
+            const jpgRef = ref(storage, `party/logo/${party.id}.jpg`);
+            logoUrl = await getDownloadURL(jpgRef);
+          } catch {
+            console.warn(`❌ ไม่พบโลโก้สำหรับ party id: ${party.id}`);
+          }
         }
+
+        return {
+          ...party,
+          logo: logoUrl,
+        };
       })
     );
 

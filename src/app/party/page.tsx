@@ -5,6 +5,7 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 
 interface Party {
+  id: string;
   name: string;
   description?: string;
 }
@@ -40,29 +41,29 @@ const PartiesPage = () => {
           <p className="text-center text-gray-300">กำลังโหลดข้อมูล...</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {parties.map((party) => {
-              const encodedName = encodeURIComponent(party.name.replace(/^พรรค\s*/, "").trim());
-              const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedName}.png?alt=media`;
+           {parties.map((party) => {
+  const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${party.id}.png?alt=media`;
 
-              return (
-                <div
-                  key={party.name}
-                  onClick={() => router.push(`/party/${encodeURIComponent(party.name)}`)}
-                  className="bg-white rounded-xl text-[#5D5A88] shadow-md p-4 cursor-pointer hover:shadow-xl transition-all relative"
-                >
-                  <img
-                    src={logoUrl}
-                    alt={`โลโก้ของ ${party.name}`}
-                    className="absolute top-4 right-4 w-12 h-12 object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = "/default-logo.jpg";
-                    }}
-                  />
-                  <h2 className="text-xl font-bold mb-2">{party.name}</h2>
-                  <p className="text-sm text-gray-700">{party.description || "ไม่มีคำอธิบาย"}</p>
-                </div>
-              );
-            })}
+  return (
+    <div
+      key={party.id}
+      onClick={() => router.push(`/party/${party.id}`)} // เปลี่ยน path เป็น id
+      className="bg-white rounded-xl text-[#5D5A88] shadow-md p-4 cursor-pointer hover:shadow-xl transition-all relative"
+    >
+      <img
+        src={logoUrl}
+        alt={`โลโก้ของ ${party.name}`}
+        className="absolute top-4 right-4 w-12 h-12 object-contain"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = "/default-logo.jpg";
+        }}
+      />
+      <h2 className="text-xl font-bold mb-2">{party.name}</h2>
+      <p className="text-sm text-gray-700">{party.description || "ไม่มีคำอธิบาย"}</p>
+    </div>
+  );
+})}
+
           </div>
         )}
       </div>

@@ -19,7 +19,6 @@ export default function DashboardSection() {
   const [sumAllocated, setSumAllocated]   = useState<number>(0);
   const [netBudget, setNetBudget]         = useState<number>(0);
   const [top3, setTop3]                   = useState<Campaign[]>([]);
-
   // หา label ชื่อพรรค
  const ALL_LABEL = "ร่วมรัฐบาล";
  const partyLabel = selected === "all"
@@ -34,12 +33,21 @@ export default function DashboardSection() {
       .then(data => {
         setAllParties(data.parties || []);
         // ในกรณีแรก ให้ preload metrics แบบรวม
-        setPolicyCount(data.policyCount);
-        setCampaignCount(data.campaignCount);
-        setTopPolicy(data.topPolicy);
-        setSumAllocated(data.sumAllocated ?? 0);
-        setNetBudget(data.netBudget ?? 0);
-        setTop3(data.top3 || []);
+             setPolicyCount(Number(data.policyCount));
+     setCampaignCount(Number(data.campaignCount));
+     setSumAllocated(Number(data.sumAllocated ?? 0));
+     setNetBudget(Number(data.netBudget ?? 0));
+      const tp = data.topPolicy
+      ? { ...data.topPolicy, total_budget: Number(data.topPolicy.total_budget) }
+      : null;
+    setTopPolicy(tp);
+     // แปลง allocated_budget ใน top3 ให้เป็น number
+     setTop3(
+       (data.top3 || []).map((c: any) => ({
+         ...c,
+         allocated_budget: Number(c.allocated_budget),
+       }))
+       );
       });
   }, []);
 
@@ -50,18 +58,27 @@ export default function DashboardSection() {
       .then(r => r.json())
       .then(data => {
         setPolicyCount(data.policyCount);
-        setCampaignCount(data.campaignCount);
-        setTopPolicy(data.topPolicy);
-        setSumAllocated(data.sumAllocated ?? 0);
-        setNetBudget(data.netBudget ?? 0);
-        setTop3(data.top3 || []);
+        setCampaignCount(Number(data.campaignCount));
+     setSumAllocated(Number(data.sumAllocated ?? 0));
+     setNetBudget(Number(data.netBudget ?? 0));
+      const tp = data.topPolicy
+      ? { ...data.topPolicy, total_budget: Number(data.topPolicy.total_budget) }
+      : null;
+    setTopPolicy(tp);
+     // แปลง allocated_budget ใน top3 ให้เป็น number
+     setTop3(
+       (data.top3 || []).map((c: any) => ({
+         ...c,
+         allocated_budget: Number(c.allocated_budget),
+       }))
+       );
       });
   }, [selected]);
 
   return (
     <section className="example-container p-6 mb-6">
       {/* Filter */}
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end mb-1">
         <select
           value={selected}
           onChange={e => setSelected(e.target.value)}
@@ -94,6 +111,9 @@ export default function DashboardSection() {
           <p className="text-6xl font-bold">{campaignCount}</p>
           <p className="text-3xl mt-1">โครงการ</p>
         </div>
+
+        
+
       </div>
 
       {/* ปุ่มดูนโยบายทั้งหมด */}
@@ -113,9 +133,9 @@ export default function DashboardSection() {
           <p className="text-2xl mt-2">{topPolicy?.name || "-"}</p>
           <h3 className="font-semibold mt-4">มูลค่า</h3>
           <p className="mt-1 text-2xl">
-            {topPolicy
-              ? topPolicy.total_budget.toLocaleString("th-TH")
-              : "-"} บาท
+              {topPolicy
+    ? topPolicy.total_budget.toLocaleString("th-TH")
+    : "-"} บาท
           </p>
         </div>
 

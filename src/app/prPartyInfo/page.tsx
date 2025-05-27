@@ -17,7 +17,7 @@ interface PartyInfo {
 
 interface Member {
   id: string;
-  prefix: string; 
+  prefix: string;
   name: string;
   surname: string;
   role: string;
@@ -46,22 +46,39 @@ export default function PRPartyInfo() {
 
 
   useEffect(() => {
-    if (!partyId || !partyName) return;
+  if (!partyId || !partyName) return;
 
-    const fetchData = async () => {
+  const fetchData = async () => {
+    try {
+      const res = await fetch(`/api/pr-partyinfo/${partyId}`);
+      const data = await res.json();
+
+      // ✅ โหลดโลโก้จาก id โดย fallback เป็น .jpg หาก .png ไม่เจอ
+      let logoUrl = "/default-party-logo.png";
       try {
-        const res = await fetch(`/api/pr-partyinfo/${partyId}`);
-        const data = await res.json();
+        const pngUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.png?alt=media`;
+        const res = await fetch(pngUrl);
+        if (res.ok) {
+          logoUrl = pngUrl;
+        } else {
+          const jpgUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.jpg?alt=media`;
+          const res2 = await fetch(jpgUrl);
+          if (res2.ok) {
+            logoUrl = jpgUrl;
+          }
+        }
+      } catch (err) {
+        console.warn("⚠️ โหลดโลโก้ไม่สำเร็จ:", err);
+      }
 
-        const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(data.name)}.png?alt=media`;
+      setPartyInfo({
+        party_des: data.description ?? "-",
+        party_link: data.link ?? "-",
+        party_logo: logoUrl,
+      });
 
-        setPartyInfo({
-          party_des: data.description ?? "-",
-          party_link: data.link ?? "-",
-          party_logo: logoUrl,
-        });
+        const memberSnapshot = await getDocs(collection(firestore, "Party", partyId!, "Member"));
 
-        const memberSnapshot = await getDocs(collection(firestore, "Party", partyName, "Member"));
 
         const memberData = await Promise.all(
           memberSnapshot.docs.map(async (docSnap) => {
@@ -73,9 +90,10 @@ export default function PRPartyInfo() {
             const fullName = nameParts.length > 1
               ? `${nameParts[0]}_${nameParts.slice(1).join("_")}_${lastName}`
               : `${firstName}_${lastName}`;
-              const id = member.id || docSnap.id;
+            const id = member.id || docSnap.id;
 
-            const basePath = `party/member/${partyName}/${member.id}`;
+            const basePath = `party/member/${partyId}/${member.id}`;
+
 
             let pictureUrl = "/default-profile.png";
 
@@ -89,12 +107,12 @@ export default function PRPartyInfo() {
             } catch { }
 
             return {
-               id,
-  prefix: member.Prefix || "", // ← เพิ่ม
-  name: member.FirstName,
-  surname: member.LastName,
-  role: member.Role,
-  image: pictureUrl,
+              id,
+              prefix: member.Prefix || "", // ← เพิ่ม
+              name: member.FirstName,
+              surname: member.LastName,
+              role: member.Role,
+              image: pictureUrl,
             };
           })
         );
@@ -111,7 +129,7 @@ export default function PRPartyInfo() {
 
   const goToPartyInfoForm = () => router.push("/prPartyInfoForm");
   const goToMemberForm = () => router.push("/prMemberForm");
-  
+
 
   const deleteMember = async (id: string) => {
     if (!partyName || !confirm("คุณต้องการลบสมาชิกคนนี้หรือไม่?")) return;
@@ -131,14 +149,16 @@ export default function PRPartyInfo() {
           ? `${nameParts[0]}_${nameParts.slice(1).join("_")}_${lastName}`
           : `${firstName}_${lastName}`;
 
-      const basePath = `party/member/${partyName}/${fullName}`;
+      const basePath = `party/member/${partyId}/${id}`;
+
+
 
       // ✅ ลบ Firestore document
       await deleteDoc(docRef);
 
       // ✅ ลบไฟล์จาก Firebase Storage (.jpg และ .png)
       const jpgRef = ref(storage, `party/member/${partyName}/${id}.jpg`);
-const pngRef = ref(storage, `party/member/${partyName}/${id}.png`);
+      const pngRef = ref(storage, `party/member/${partyName}/${id}.png`);
 
       try {
         await deleteObject(jpgRef);
@@ -160,8 +180,8 @@ const pngRef = ref(storage, `party/member/${partyName}/${id}.png`);
   };
 
   const editMember = (id: string | number) => {
-  router.push(`/prMemberFormEdit?editId=${id}`);
-};
+    router.push(`/prMemberFormEdit?editId=${id}`);
+  };
 
 
   if (!partyName) {
@@ -218,19 +238,21 @@ const pngRef = ref(storage, `party/member/${partyName}/${id}.png`);
             {members.map((member) => (
               <div key={member.id} className="bg-white p-4 rounded-lg shadow-lg text-center">
                 <img src={member.image} alt={member.name} className="w-24 h-24 mx-auto rounded-full shadow-md" />
-                <p className="mt-2 font-semibold">{member.prefix} {member.name} {member.surname}</p>
+                <p className="mt-2 font-semibold">
+                  {member.prefix ? `${member.prefix} ` : ""}{member.name} {member.surname}
+                </p>
                 <p className="text-gray-600">{member.role}</p>
                 <div className=" mt-4">
-                <button
-                  onClick={() => editMember(member.id)}
-                  className="m-2 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600"
-                >
-                  ✏ แก้ไข
-                </button>
+                  <button
+                    onClick={() => editMember(member.id)}
+                    className="m-2 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600"
+                  >
+                    ✏ แก้ไข
+                  </button>
 
-                <button onClick={() => deleteMember(member.id)} className="m-2 bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-700">
-                  ❌ ลบ
-                </button>
+                  <button onClick={() => deleteMember(member.id)} className="m-2 bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-700">
+                    ❌ ลบ
+                  </button>
                 </div>
               </div>
             ))}

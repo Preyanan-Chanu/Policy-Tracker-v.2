@@ -18,73 +18,63 @@ export default function AdminSignupPage() {
   const [role, setRole] = useState<"pr" | "admin">("pr");
   const [partyName, setPartyName] = useState("");
   const [message, setMessage] = useState("");
-  const [partyList, setPartyList] = useState<string[]>([]);
+  const [partyList, setPartyList] = useState<{ id: number; name: string }[]>([]);
+  const [partyId, setPartyId] = useState<number | null>(null);
+
+
 
   useEffect(() => {
-    if (role === "pr") {
-      fetch("/api/admin/getAllPartyNames") // คุณต้องสร้าง API นี้ด้วย
-        .then((res) => res.json())
-        .then((data) => {
-          setPartyList(data.names || []);
-        })
-        .catch((err) => {
-          console.error("❌ โหลดรายชื่อพรรคไม่สำเร็จ:", err);
-          setPartyList([]);
-        });
-    }
-  }, [role]);
+  if (role === "pr") {
+    fetch("/api/admin/getAllParties") // ← API ใหม่ที่ส่ง id + name
+      .then((res) => res.json())
+      .then((data) => {
+        setPartyList(data || []);
+      })
+      .catch((err) => {
+        console.error("❌ โหลดรายชื่อพรรคไม่สำเร็จ:", err);
+        setPartyList([]);
+      });
+  }
+}, [role]);
 
 
 
   const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
+  e.preventDefault();
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const uid = userCredential.user.uid;
 
-      const payload: any = {
-        email,
-        displayName,
-        role,
-      };
+    const payload: any = {
+      email,
+      displayName,
+      role,
+    };
 
-      if (role === "pr") {
-        payload.partyName = partyName;
-
-        const res = await fetch("/api/admin/getPartyIdByName", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: partyName }),
-        });
-        if (!res.ok) {
-          setMessage("❌ ไม่พบพรรคนี้ในระบบ Neo4j");
-          return;
-        }
-        const { partyId } = await res.json();
-        payload.partyId = partyId;
-
-        if (partyId === null) {
-          setMessage("❌ ไม่พบพรรคนี้ในระบบ Neo4j");
-          return;
-        }
-        payload.partyId = partyId;
+    if (role === "pr") {
+      if (!partyId) {
+        setMessage("❌ กรุณาเลือกพรรคให้ถูกต้อง");
+        return;
       }
+      payload.partyId = partyId;
 
-
-      await setDoc(doc(firestore, "users", uid), payload);
-
-      setMessage("✅ สร้างบัญชีผู้ใช้สำเร็จ!");
-      setEmail("");
-      setPassword("");
-      setDisplayName("");
-      setPartyName("");
-
-      router.push("/admin");
-    } catch (error: any) {
-      console.error("เกิดข้อผิดพลาด:", error.message);
-      setMessage("❌ " + error.message);
+      const selectedParty = partyList.find((p) => p.id === partyId);
+      payload.partyName = selectedParty?.name ?? "";
     }
-  };
+
+    await setDoc(doc(firestore, "users", uid), payload);
+
+    setMessage("✅ สร้างบัญชีผู้ใช้สำเร็จ!");
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    setPartyId(null);
+    router.push("/admin");
+  } catch (error: any) {
+    console.error("เกิดข้อผิดพลาด:", error.message);
+    setMessage("❌ " + error.message);
+  }
+};
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#9795B5]">
@@ -129,23 +119,23 @@ export default function AdminSignupPage() {
         </select>
 
         {role === "pr" && (
-          <>
-            <label className="block mb-2">ชื่อพรรค</label>
-            <select
-              value={partyName}
-              onChange={(e) => setPartyName(e.target.value)}
-              className="w-full p-2 mb-4 border rounded"
-              required
-            >
-              <option value="">-- เลือกพรรคการเมือง --</option>
-              {partyList.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
+  <>
+    <label className="block mb-2">เลือกพรรค</label>
+    <select
+      value={partyId ?? ""}
+      onChange={(e) => setPartyId(Number(e.target.value))}
+      className="w-full p-2 mb-4 border rounded"
+      required
+    >
+      <option value="">-- เลือกพรรคการเมือง --</option>
+      {partyList.map((party) => (
+        <option key={party.id} value={party.id}>
+          {party.name}
+        </option>
+      ))}
+    </select>
+  </>
+)}
 
 
         {message && <p className="mb-4 text-center text-sm text-red-600">{message}</p>}
