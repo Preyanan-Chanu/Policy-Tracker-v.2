@@ -9,28 +9,35 @@ import { doc, getDoc, collection, onSnapshot } from "firebase/firestore";
 import Step from "@/app/components/step";
 import { useRouter } from "next/navigation";
 import DashboardSection from "@/app/components/DashboardSection";
+import { useMemo } from "react";
 
 
   interface Policy {
-    name: string;
-    description: string;
-    partyName: string;
-    status: string; 
-     id: string;
-  }
+  id: string | number;
+  name: string;
+  description?: string; // เผื่อไว้
+  partyName: string;
+  status: string;
+  progress: number; // ใหม่
+}
   
   interface Category {
-    name: string;
-    policies: Policy[];
-  }
+  categoryName: string; // เปลี่ยนจาก name
+  averageProgress: number;
+  policies: Policy[];
+}
 
   // --- เพิ่ม state เพื่อเก็บนโยบายยอดนิยม ---
-  interface PopularPolicy { policyName: string; likeCount: number; }
+  interface PopularPolicy { id: string;   policyName: string; likeCount: number; }
 
-  interface RecentPolicy { policyName: string; updatedAt: string; }
+  interface RecentPolicy { id: string;   policyName: string; updatedAt: string; }
 
   
   export default function HomePage() {
+    
+const [slideIndex, setSlideIndex] = useState(0); // index ของการ์ด
+
+const [dashboardData, setDashboardData] = useState<any>(null);
     const [categories, setCategories] = useState<Category[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [popularPolicies, setPopularPolicies] = useState<PopularPolicy[]>([]);
@@ -45,7 +52,9 @@ import DashboardSection from "@/app/components/DashboardSection";
   const [policies, setPolicies] = useState<any[]>([]);
   const router = useRouter();
 
-  const fetchPolicies = async () => {
+  const [latestPolicies, setLatestPolicies] = useState<PopularPolicy[]>([]);
+
+const fetchPolicies = async () => {
     try {
       const res = await fetch("/api/policy");
       const data = await res.json();
@@ -55,7 +64,7 @@ import DashboardSection from "@/app/components/DashboardSection";
     }
   };
 
-  const [latestPolicies, setLatestPolicies] = useState<PopularPolicy[]>([]);
+
 
 useEffect(() => {
   async function fetchLatest() {
@@ -89,18 +98,19 @@ useEffect(() => {
     
   
     useEffect(() => {
-      const fetchCategories = async () => {
-        try {
-          const res = await fetch("/api/home");
-          const data = await res.json();
-          setCategories(data);
-        } catch (err) {
-          console.error("❌ Failed to fetch categories:", err);
-        }
-      };
-  
-      fetchCategories();
-    }, []);
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch("/api/home/progress");
+      const data = await res.json();
+      setCategories(data);
+    } catch (err) {
+      console.error("❌ Failed to fetch categories:", err);
+    }
+  };
+
+  fetchCategories();
+}, []);
+
 
     // --- ดึง 5 อันดับนโยบายจาก API และจัดเรียงตาม likeCount ---
   useEffect(() => {
@@ -115,6 +125,7 @@ useEffect(() => {
               );
              const { like } = await r.json();
               return {
+                id: p.id,   
                 policyName: p.policyName,
                 likeCount: Number(like) || 0,
               };
@@ -142,7 +153,7 @@ useEffect(() => {
           .filter(p => p.updatedAt)
           .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
           .slice(0, 5)
-          .map(p => ({ policyName: p.policyName, updatedAt: p.updatedAt }));
+          .map(p => ({ id: p.id ,policyName: p.policyName, updatedAt: p.updatedAt }));
         setRecentPolicies(sorted);
       } catch (err) {
         console.error("❌ fetch recent error:", err);
@@ -150,6 +161,21 @@ useEffect(() => {
     }
     fetchRecent();
   }, []);
+
+  useEffect(() => {
+  async function fetchDashboard() {
+    try {
+      const res = await fetch(`/api/home/summary?party=${encodeURIComponent(selectedParty)}`);
+      const data = await res.json();
+      setDashboardData(data);
+    } catch (err) {
+      console.error("❌ Error loading dashboard:", err);
+    }
+  }
+
+  fetchDashboard();
+}, [selectedParty]);
+
 
 
   return (
@@ -221,19 +247,25 @@ useEffect(() => {
      return (
  <div
    key={idx}
-   className="
+   className=" relative
      w-[600px] h-[330px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88]
      p-4 flex flex-col justify-between
      cursor-pointer transform transition-transform duration-200
      hover:scale-105
    "
- >         <div>
-           <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
-             {category.name}
-             <span className="text-xl text-gray-400 ml-2 font-normal">
-               (มีทั้งหมด {displayPolicies.length} นโยบาย)
-             </span>
-           </h3>
+ >         
+ <div className="absolute top-4 right-4 bg-[#5D5A88] text-white text-md font-semibold px-3 py-1 rounded-full shadow-lg z-10">
+        ค่าเฉลี่ย {category.averageProgress?.toFixed(1) ?? 0}%
+      </div>
+
+      <div>
+        <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
+          {category.categoryName}
+          <span className="text-xl text-gray-400 ml-2 font-normal">
+            (มีทั้งหมด {displayPolicies.length} นโยบาย)
+          </span>
+        </h3>
+
 
            
     <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
@@ -256,7 +288,12 @@ useEffect(() => {
               {stepMap[p.status].step}
             </div>
           )}
-          <span className="flex-1 truncate text-left">{p.name}</span>
+          <span className="flex-1 truncate text-left">
+  {p.name}
+  <span className="text-sm text-gray-500 ml-2">
+    ({p.progress?.toFixed(1) ?? 0}%)
+  </span>
+</span>
         </div>
         <img
           src={logoUrl}
@@ -273,7 +310,7 @@ useEffect(() => {
 </div>
 
          <div className="text-right mt-2">
-           <Link href={`/policycategory/${encodeURIComponent(category.name)}`} className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]">
+           <Link href={`/policycategory/${encodeURIComponent(category.categoryName)}`} className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]">
              ดูเพิ่มเติม &rarr;
            </Link>
          </div>
@@ -307,17 +344,21 @@ useEffect(() => {
           นโยบายที่ได้รับความสนใจสูงสุด
         </h3>
         <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
-          {popularPolicies.slice(0, 5).map((p) => (
-            <li key={p.policyName} className="flex justify-between items-center border-b pb-1">
-              <span className="truncate">{p.policyName}</span>
+          {popularPolicies.map((p) => (
+            <li
+              key={p.id}
+              className="flex justify-between items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
+              onClick={() => router.push(`/policydetail/${p.id}`)}  // คลิกแล้วไป detail
+            >
+           <span className="truncate">{p.policyName}</span>
               <span>👍 {p.likeCount}</span>
-            </li>
+              </li>
           ))}
         </ul>
       </div>
       <div className="text-right mt-2">
         <Link
-          href={`/policy`}
+          href={`/policycategory`}
           className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
         >
           ดูเพิ่มเติม &rarr;
@@ -333,14 +374,19 @@ useEffect(() => {
       </h3>
       <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
         {latestPolicies.slice(0, 5).map((p) => (
-          <li key={p.policyName} className="border-b pb-1 truncate">
-            {p.policyName}
-          </li>
+           <li
+              key={p.id}
+              className="flex justify-between items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
+              onClick={() => router.push(`/policydetail/${p.id}`)}  // คลิกแล้วไป detail
+            >
+              <span className="truncate">{p.policyName}</span>
+              
+            </li>
         ))}
       </ul>
       <div className="text-right mt-2">
         <Link
-          href="/policy"
+          href="/policycategory"
           className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
         >
           ดูเพิ่มเติม &rarr;

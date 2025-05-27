@@ -7,14 +7,15 @@ export async function GET() {
   try {
     const result = await session.run(`
       MATCH (c:Category)<-[:HAS_CATEGORY]-(p:Policy)-[:BELONGS_TO]->(party:Party)
-      WITH c.name AS categoryName, 
-      collect({
-        id: toString(p.id), 
-        name: p.name,
-        description: p.description,
-        partyName: party.name,   // ← ตรงนี้ต้องมี comma
-        status: p.status         // ← ฟิลด์ใหม่
-      }) AS policies
+      WITH c.name AS categoryName,
+           collect({
+             id: toString(p.id),
+             name: p.name,
+             description: p.description,
+             partyName: party.name,
+             status: p.status,           // ← ใส่ comma ตรงนี้
+             updatedAt: p.updatedAt      // ← แม็ปรายการ updatedAt แบบ key: value
+           }) AS policies
       RETURN categoryName, policies
       ORDER BY categoryName
       LIMIT 8

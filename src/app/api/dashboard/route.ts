@@ -1,82 +1,216 @@
 // src/app/api/dashboard/route.ts
-import { NextResponse, NextRequest  } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import pg from "@/app/lib/postgres";
+import driver from "@/app/lib/neo4j";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const partyId = url.searchParams.get("partyId") || "all";
+
+const session = driver.session();
+
+let policyProgress = 0;
+let projectProgress = 0;
+let specialProgress = 0;
+
+const partyCondition = partyId === "all" ? "" : "WHERE p.party_id = $partyId";
+
+try {
+  const queryPrefix = partyId === "all" ? "" : `WHERE p.party_id = $partyId`;
+
+  const policyRes = await session.run(
+  partyId === "all"
+    ? `
+      MATCH (p:Policy)
+      OPTIONAL MATCH (p)<-[:PART_OF]-(c:Campaign)
+      WITH p,
+          CASE c.size WHEN 'เล็ก' THEN 1 WHEN 'กลาง' THEN 2 WHEN 'ใหญ่' THEN 3 ELSE 0 END AS weight,
+          toFloat(c.progress) AS progress
+      WITH p,
+          collect(progress * weight) AS weightedScores,
+          collect(weight) AS weights
+      WITH p,
+          reduce(s=0.0, x IN weightedScores | s + toFloat(x)) AS totalWeighted,
+          reduce(s=0.0, x IN weights | s + toFloat(x)) AS totalWeight
+      WITH p,
+          CASE WHEN totalWeight > 0 THEN totalWeighted / totalWeight ELSE 0 END AS weightedAvg
+      RETURN avg(weightedAvg) AS policyProgress
+    `
+    : `
+      MATCH (party:Party {id: $partyId})<-[:BELONGS_TO]-(p:Policy)
+      OPTIONAL MATCH (p)<-[:PART_OF]-(c:Campaign)
+      WITH p,
+          CASE c.size WHEN 'เล็ก' THEN 1 WHEN 'กลาง' THEN 2 WHEN 'ใหญ่' THEN 3 ELSE 0 END AS weight,
+          toFloat(c.progress) AS progress
+      WITH p,
+          collect(progress * weight) AS weightedScores,
+          collect(weight) AS weights
+      WITH p,
+          reduce(s=0.0, x IN weightedScores | s + toFloat(x)) AS totalWeighted,
+          reduce(s=0.0, x IN weights | s + toFloat(x)) AS totalWeight
+      WITH p,
+          CASE WHEN totalWeight > 0 THEN totalWeighted / totalWeight ELSE 0 END AS weightedAvg
+      RETURN avg(weightedAvg) AS policyProgress
+    `,
+  partyId === "all" ? {} : { partyId: Number(partyId) }
+);
+
+
+
+  policyProgress = policyRes.records[0]?.get("policyProgress") || 0;
+
+  const projectRes = await session.run(
+  partyId === "all"
+    ? `MATCH (c:Campaign) RETURN avg(toFloat(c.progress)) AS projectProgress`
+    : `
+      MATCH (party:Party {id: $partyId})
+      MATCH (party)<-[:BELONGS_TO]-(p:Policy)<-[:PART_OF]-(c:Campaign)
+      RETURN avg(toFloat(c.progress)) AS projectProgress
+    `,
+  partyId === "all" ? {} : { partyId: Number(partyId) }
+);
+
+
+  projectProgress = projectRes.records[0]?.get("projectProgress") || 0;
+
+  const specialRes = await session.run(`
+  MATCH (c:SpecialCampaign)-[:CREATED_BY]->(party:Party)
+  WHERE (c.size = 'ใหญ่' OR c.impact = 'สูง')
+  ${partyId === "all" ? "" : "AND party.id = toInteger($partyId)"}
+  RETURN avg(toFloat(c.progress)) AS specialProgress
+`, partyId === "all" ? {} : { partyId: Number(partyId) });
+
+  specialProgress = specialRes.records[0]?.get("specialProgress") || 0;
+} finally {
+  await session.close();
+}
+let topSpecial = null;
+
+try {
+  const topSpecialRes = await session.run(
+    `
+    MATCH (s:SpecialCampaign)-[:CREATED_BY]->(party:Party)
+    ${partyId === "all" ? "" : "WHERE party.id = toInteger($partyId)"}
+    RETURN s.id AS id, s.name AS name
+    ORDER BY s.id DESC LIMIT 1
+    `,
+    partyId === "all" ? {} : { partyId: Number(partyId) }
+  );
+
+  const specialNode = topSpecialRes.records[0];
+  if (specialNode) {
+    const sid = specialNode.get("id")?.toNumber?.();
+    const sname = specialNode.get("name");
+
+    const pgRes = await pg.query(
+      `SELECT allocated_budget FROM campaigns WHERE id = $1`,
+      [sid]
+    );
+
+    const budget = pgRes.rows[0]?.allocated_budget;
+    topSpecial = {
+      id: sid,
+      name: sname,
+      allocated_budget: Number(budget || 0),
+    };
+  }
+} catch (err) {
+  console.error("❌ Failed to load topSpecial:", err);
+}
+
+
+
   const client = await pg.connect();
 
   try {
-    // นับ policies
-    const polRes = await client.query(`
-      SELECT COUNT(*) AS cnt
-      FROM policies
-      ${partyId === "all" ? "" : "WHERE party_id = $1"}
-    `, partyId === "all" ? [] : [partyId]);
-    const policyCount = Number(polRes.rows[0].cnt);
+    const partyFilter = partyId === "all" ? "" : "WHERE party_id = $1";
+    const partyParam = partyId === "all" ? [] : [partyId];
 
-    // นับ campaigns
-    const campRes = await client.query(`
-      SELECT COUNT(*) AS cnt
-      FROM campaigns
-      ${partyId === "all" ? "" : "WHERE party_id = $1"}
-    `, partyId === "all" ? [] : [partyId]);
-    const campaignCount = Number(campRes.rows[0].cnt);
+    // ดึงข้อมูล policies
+    const policyRes = await client.query(`
+      SELECT * FROM policies ${partyFilter}
+    `, partyParam);
+    const policies = policyRes.rows;
 
-    // ดึง list พรรคทั้งหมด (หรือกรองตาม partyId ถ้าไม่ใช่ all)
+    // ดึงข้อมูล campaigns
+    const campaignRes = await client.query(`
+      SELECT * FROM campaigns ${partyFilter}
+    `, partyParam);
+    const campaigns = campaignRes.rows;
+
+    // ดึงข้อมูล expenses ทั้งหมด (ไม่มี party_id โดยตรง)
+    const expenseRes = await client.query(`SELECT * FROM expenses`);
+    const expenses = expenseRes.rows;
+
+    // ดึง list พรรค
     const partiesRes = await client.query(`
-      SELECT id, name
-      FROM parties
-      ${partyId === "all" ? "" : "WHERE id = $1"}
-    `, partyId === "all" ? [] : [partyId]);
+      SELECT id, name FROM parties ${partyId === "all" ? "" : "WHERE id = $1"}
+    `, partyParam);
     const parties = partiesRes.rows;
 
-    // Policy ที่งบสูงสุด
-    const topPolicyRes = await client.query(`
-      SELECT id, name, total_budget
-      FROM policies
-      ${partyId === "all" ? "" : "WHERE party_id = $1"}
-      ORDER BY total_budget DESC
-      LIMIT 1
-    `, partyId === "all" ? [] : [partyId]);
-    const topPolicy = topPolicyRes.rows[0] || null;
+    // Count
+    const policyCount = policies.length;
+    const campaignCount = campaigns.length;
 
-    // คำนวณ sumAllocated และ sumExpense เพื่อหา netBudget
-    const sumRes = await client.query(`
-      SELECT
-        COALESCE(SUM(c.allocated_budget),0) AS sum_allocated,
-        COALESCE(SUM(e.amount),0) AS sum_expense
-      FROM campaigns c
-      LEFT JOIN expenses e ON e.campaign_id = c.id
-      ${partyId === "all" ? "" : "WHERE c.party_id = $1"}
-    `, partyId === "all" ? [] : [partyId]);
-    const { sum_allocated, sum_expense } = sumRes.rows[0];
-    const sumAllocated = Number(sum_allocated);
-    const netBudget = sumAllocated - Number(sum_expense);
-
-    // Top 3 campaigns
-    const top3Res = await client.query(`
-      SELECT id, name, allocated_budget
-      FROM campaigns
-      ${partyId === "all" ? "" : "WHERE party_id = $1"}
-      ORDER BY allocated_budget DESC
-      LIMIT 3
-    `, partyId === "all" ? [] : [partyId]);
-    const top3 = top3Res.rows;
-
+    // คำนวณรวมงบ
+    const totalBudget = policies.reduce((sum, p) => sum + Number(p.total_budget || 0), 0);
+    const totalAllocated = campaigns.reduce((sum, c) => sum + Number(c.allocated_budget || 0), 0);
+    const campaignIds = campaigns.map(c => c.id);
+    const totalExpense = expenses
+      .filter(e => campaignIds.includes(e.campaign_id))
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const netBudget = totalAllocated - totalExpense;
     
 
-    // คืนค่าให้หน้าบ้าน
+    // Top นโยบาย / โครงการ / โครงการพิเศษ
+    const topPolicy = [...policies]
+      .sort((a, b) => Number(b.total_budget) - Number(a.total_budget))[0] || null;
+
+    const top3Policies = [...policies]
+      .sort((a, b) => Number(b.total_budget) - Number(a.total_budget))
+      .slice(0, 3);
+
+    const top3Campaigns = [...campaigns]
+    .filter(c => c.policy_id !== null)
+      .sort((a, b) => Number(b.allocated_budget) - Number(a.allocated_budget))
+      .slice(0, 3);
+
+    const specialProjects = campaigns.filter(c => c.policy_id === null);
+const topSpecial = [...specialProjects]
+  .sort((a, b) => Number(b.allocated_budget) - Number(a.allocated_budget))[0] || null;
+
+      
+
     return NextResponse.json({
-      policyCount,
-      campaignCount,
-      parties,         // <-- คืนค่าที่ดึงมาแทน []
-      topPolicy,
-      sumAllocated,    // ชื่อตรงกับ setSumAllocated
-      netBudget,
-      top3,
+      
+       policies,
+  campaigns,
+  expenses,
+  parties,
+  policyCount,
+  campaignCount,
+  totalBudget,
+  totalAllocated,
+  totalExpense,
+  netBudget,
+
+ 
+  policyProgress,
+  projectProgress,
+  specialProgress,
+
+
+  topPolicy,
+  top3Policies,
+  top3Campaigns,
+  topSpecial,
+     
+      
     });
+  } catch (err) {
+    console.error("Dashboard API error:", err);
+    
+    return NextResponse.json({ error: "Failed to fetch dashboard data" }, { status: 500 });
   } finally {
     client.release();
   }

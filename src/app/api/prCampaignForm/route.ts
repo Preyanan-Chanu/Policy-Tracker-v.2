@@ -81,7 +81,7 @@ console.log("🎯 req.body =", { name, partyId, policyId });
            area: $area,
            impact: $impact,
            size: $size
-         })-[:BELONGS_TO]->(party)`,
+         })-[:CREATED_BY]->(party)`,
         { id: campaignId, name, description, status, progress, /* banner,*/ area, impact, size, partyId }
       );
 
@@ -90,9 +90,9 @@ console.log("🎯 req.body =", { name, partyId, policyId });
           const amount = Number(exp.amount);
           if (exp.description && !isNaN(amount)) {
             await client.query(
-              `INSERT INTO expenses (campaign_id, description, amount, category)
-               VALUES ($1, $2, $3, $4)`,
-              [campaignId, exp.description, amount, "ไม่ระบุ"]
+              `INSERT INTO expenses (campaign_id, description, amount)
+               VALUES ($1, $2, $3)`,
+              [campaignId, exp.description, amount]
             );
           }
         }
@@ -136,9 +136,9 @@ console.log("🎯 req.body =", { name, partyId, policyId });
         const amount = Number(exp.amount);
         if (exp.description && !isNaN(amount)) {
           await client.query(
-            `INSERT INTO expenses (campaign_id, description, amount, category)
-             VALUES ($1, $2, $3, $4)`,
-            [campaignId, exp.description, amount, "ไม่ระบุ"]
+            `INSERT INTO expenses (campaign_id, description, amount)
+             VALUES ($1, $2, $3)`,
+            [campaignId, exp.description, amount]
           );
         }
       }

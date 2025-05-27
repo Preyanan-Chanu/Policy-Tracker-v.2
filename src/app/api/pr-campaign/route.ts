@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
 
     // ✅ 2. ดึง budget และ created_at จาก PostgreSQL สำหรับโครงการทั่วไปเท่านั้น
     const validIds = neoCampaigns
-      .filter((c) => !c.isSpecial)
       .map((c) => c.id)
       .filter((id): id is number => typeof id === "number" && id <= 2147483647);
 
@@ -87,7 +86,8 @@ export async function POST(req: NextRequest) {
         progress: c.progress,
         policy: c.policy,
         status: c.status,
-        budget: pgCampaigns[c.id!]?.allocated_budget ?? (c.isSpecial ? null : null),
+        budget: pgCampaigns[c.id!]?.allocated_budget ?? "-",
+
         created_at: pgCampaigns[c.id!]?.created_at ?? null,
         area: c.area,
         impact: c.impact,

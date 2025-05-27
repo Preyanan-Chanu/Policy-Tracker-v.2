@@ -2,93 +2,162 @@
 "use client";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import DashboardCard from "@/app/components/DashboardCard";
 
-interface Party   { id: string; name: string; }
-interface Policy  { id: string; name: string; total_budget: number; }
-interface Campaign{ id: string; name: string; allocated_budget: number; }
+
+interface Party { id: string; name: string; }
+interface Policy { id: string; name: string; total_budget: number; }
+interface Campaign { id: string; name: string; allocated_budget: number; }
 
 export default function DashboardSection() {
   // รายชื่อพรรค dropdown
   const [allParties, setAllParties] = useState<Party[]>([]);
   // เมตริกซ์ตัวเลข
-  const [policyCount, setPolicyCount]     = useState<number>(0);
+  const [policyCount, setPolicyCount] = useState<number>(0);
   const [campaignCount, setCampaignCount] = useState<number>(0);
   // Dashboard data ตาม selected
-  const [selected, setSelected]           = useState<string>("all");
-  const [topPolicy, setTopPolicy]         = useState<Policy | null>(null);
-  const [sumAllocated, setSumAllocated]   = useState<number>(0);
-  const [netBudget, setNetBudget]         = useState<number>(0);
-  const [top3, setTop3]                   = useState<Campaign[]>([]);
+  const [selected, setSelected] = useState<string>("all");
+  const [topPolicy, setTopPolicy] = useState<Policy | null>(null);
+  const [sumAllocated, setSumAllocated] = useState<number>(0);
+  const [netBudget, setNetBudget] = useState<number>(0);
+  const [top3, setTop3] = useState<Campaign[]>([]);
   // หา label ชื่อพรรค
- const ALL_LABEL = "ร่วมรัฐบาล";
- const partyLabel = selected === "all"
-   ? ALL_LABEL
-   // แก้ตรงนี้: cast id เป็น string เวลาหาร
-   : allParties.find(p => String(p.id) === selected)?.name || "";
+  const ALL_LABEL = "ร่วมรัฐบาล";
+  const partyLabel = selected === "all"
+    ? ALL_LABEL
+    // แก้ตรงนี้: cast id เป็น string เวลาหาร
+    : allParties.find(p => String(p.id) === selected)?.name || "";
 
-  // 1) fetch รายชื่อพรรคครั้งแรก
-  useEffect(() => {
-    fetch("/api/dashboard")             // ดึงรายชื่อพรรคจาก endpoint เดียวกับ metrics
-      .then(r => r.json())
-      .then(data => {
-        setAllParties(data.parties || []);
-        // ในกรณีแรก ให้ preload metrics แบบรวม
-             setPolicyCount(Number(data.policyCount));
-     setCampaignCount(Number(data.campaignCount));
-     setSumAllocated(Number(data.sumAllocated ?? 0));
-     setNetBudget(Number(data.netBudget ?? 0));
-      const tp = data.topPolicy
-      ? { ...data.topPolicy, total_budget: Number(data.topPolicy.total_budget) }
-      : null;
-    setTopPolicy(tp);
-     // แปลง allocated_budget ใน top3 ให้เป็น number
-     setTop3(
-       (data.top3 || []).map((c: any) => ({
-         ...c,
-         allocated_budget: Number(c.allocated_budget),
-       }))
-       );
-      });
-  }, []);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [policyProgress, setPolicyProgress] = useState<number>(0);
+  const [projectProgress, setProjectProgress] = useState<number>(0);
+  const [specialProgress, setSpecialProgress] = useState<number>(0);
+const [page, setPage] = useState(0);
+const [top3Policy, setTop3Policy] = useState<Policy[]>([]);
+  const [topSpecial, setTopSpecial] = useState<Campaign | null>(null);
+  const [sumExpenses, setSumExpenses] = useState<number>(0);
+
+// สร้าง cards array
+const cards = [
+  <DashboardCard key="policy-progress" title="ความคืบหน้านโยบายทั้งหมด" main={`${policyProgress.toFixed(1)}%`} />,
+    <DashboardCard key="project-progress" title="ความคืบหน้าโครงการทั้งหมด" main={`${projectProgress.toFixed(1)}%`} />,
+    <DashboardCard key="special-progress" title="ความคืบหน้าโครงการพิเศษทั้งหมด" main={`${specialProgress.toFixed(1)}%`} />,
+  <DashboardCard key="total-budget" title="งบประมาณรวมทั้งหมด" main={`${sumAllocated.toLocaleString("th-TH")} บาท`} />, 
+    <DashboardCard key="total-expense" title="รายจ่ายรวมทั้งหมด" main={`${sumExpenses.toLocaleString("th-TH")} บาท`} />,
+    <DashboardCard key="net-budget" title="คงเหลือทั้งหมด" main={`${netBudget.toLocaleString("th-TH")} บาท`} />,
+  <div key="top3-policy" className="p-6 rounded-xl bg-[#f5f8ff] shadow-md text-center">
+      <h3 className="text-xl font-semibold text-[#3f3c62] mb-4">นโยบายที่ได้รับงบสูงสุด 3 อันดับ</h3>
+      <ul className="space-y-3">
+        {top3Policy.map((p, i) => (
+          <li key={`${p.id}-${i}`} className="flex justify-between">
+            <span className="text-[#3f3c62] font-medium truncate">{`${i + 1}. ${p.name}`}</span>
+            <span className="text-[#5D5A88] font-bold">{p.total_budget.toLocaleString("th-TH")} บาท</span>
+          </li>
+        ))}
+      </ul>
+    </div>,
+    <div key="top3-projects" className="p-6 rounded-xl bg-[#f5f8ff] shadow-md text-center">
+      <h3 className="text-xl font-semibold text-[#3f3c62] mb-4">โครงการที่ได้รับงบสูงสุด 3 อันดับ</h3>
+      <ul className="space-y-3">
+        {top3.map((c, i) => (
+          <li key={`${c.id}-${i}`} className="flex justify-between">
+            <span className="text-[#3f3c62] font-medium truncate">{`${i + 1}. ${c.name}`}</span>
+            <span className="text-[#5D5A88] font-bold">{c.allocated_budget.toLocaleString("th-TH")} บาท</span>
+          </li>
+        ))}
+      </ul>
+    </div>,
+    <DashboardCard key="top-special" title="โครงการพิเศษที่ได้รับงบสูงสุด" main={topSpecial?.name || "-"} sub={`${topSpecial?.allocated_budget.toLocaleString("th-TH") || "-"} บาท`} />,
+  ];
+
+// แบ่งการ์ดเป็นกลุม 3 การ์ดต่อหน้า
+const slides = chunk(cards, 3);
+
+function chunk<T>(array: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(array.length / size) }, (_, i) =>
+    array.slice(i * size, i * size + size)
+  );
+}
+  
 
   // 2) fetch dashboard ทุกครั้งที่ selected เปลี่ยน
   useEffect(() => {
-    const query = selected === "all" ? "" : `?partyId=${selected}`;
-    fetch(`/api/dashboard${query}`)
-      .then(r => r.json())
-      .then(data => {
-        setPolicyCount(data.policyCount);
-        setCampaignCount(Number(data.campaignCount));
-     setSumAllocated(Number(data.sumAllocated ?? 0));
-     setNetBudget(Number(data.netBudget ?? 0));
-      const tp = data.topPolicy
-      ? { ...data.topPolicy, total_budget: Number(data.topPolicy.total_budget) }
-      : null;
-    setTopPolicy(tp);
-     // แปลง allocated_budget ใน top3 ให้เป็น number
-     setTop3(
-       (data.top3 || []).map((c: any) => ({
-         ...c,
-         allocated_budget: Number(c.allocated_budget),
-       }))
-       );
-      });
-  }, [selected]);
+  const query = selected === "all" ? "" : `?partyId=${selected}`;
+  fetch(`/api/dashboard${query}`)
+    .then(async (r) => {
+      if (!r.ok) throw new Error(`API failed: ${r.status} ${await r.text()}`);
+      return r.json();
+    })
+    .then(data => {
+      setPolicyCount(data.policyCount || 0);
+      setCampaignCount(data.campaignCount || 0);
+      setSumAllocated(Number(data.totalAllocated || 0));
+      setNetBudget(Number(data.netBudget || 0));
+      setSumExpenses(Number(data.totalExpense || 0));
+      setPolicyProgress(Number(data.policyProgress || 0));
+      setProjectProgress(Number(data.projectProgress || 0));
+      setSpecialProgress(Number(data.specialProgress || 0));
+      setTop3((data.top3Campaigns || [])
+  .filter((c: any) => !c.isSpecial) // ← กรองไม่ให้แสดง SpecialCampaign
+  .map((c: any) => ({
+    ...c,
+    allocated_budget: Number(c.allocated_budget),
+  }))
+);
+
+      setTop3Policy((data.top3Policies || []).map((p: any) => ({ ...p, total_budget: Number(p.total_budget) })));
+      setTopSpecial(
+  data.topSpecial
+    ? {
+        ...data.topSpecial,
+        allocated_budget: Number(data.topSpecial.allocated_budget || 0),
+      }
+    : null
+);
+    })
+    .catch(err => {
+      console.error("❌ Error loading dashboard:", err);
+    });
+}, [selected]);
+
+useEffect(() => {
+  fetch("/api/dashboard/parties")
+    .then(r => r.json())
+    .then(data => {
+      setAllParties(data.parties || []);
+    })
+    .catch(err => {
+      console.error("❌ failed to load parties:", err);
+      setAllParties([]); // fallback
+    });
+}, []);
+
+
+
+useEffect(() => {
+  if (slides.length > 1) {
+    const timer = setInterval(() => {
+      setPage((prev) => (prev + 1) % slides.length);
+    }, 30000); // 10 วินาที
+    return () => clearInterval(timer);
+  }
+}, [slides.length]);
 
   return (
     <section className="example-container p-6 mb-6">
       {/* Filter */}
       <div className="flex justify-end mb-1">
         <select
-          value={selected}
-          onChange={e => setSelected(e.target.value)}
-          className="bg-white text-black px-2 py-1 rounded shadow"
-        >
-          <option value="all">ร่วมรัฐบาล</option>
-          {allParties.map((p, i) => (
-            <option key={`${p.id}-${i}`} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+  value={selected}
+  onChange={e => setSelected(e.target.value)}
+  className="bg-white text-black px-2 py-1 rounded shadow"
+>
+  <option value="all">ร่วมรัฐบาล</option>
+  {allParties.map((p) => (
+    <option key={p.id} value={p.id}>{p.name}</option>
+  ))}
+</select>
+
       </div>
 
       {/* ชื่อพรรค */}
@@ -111,9 +180,6 @@ export default function DashboardSection() {
           <p className="text-6xl font-bold">{campaignCount}</p>
           <p className="text-3xl mt-1">โครงการ</p>
         </div>
-
-        
-
       </div>
 
       {/* ปุ่มดูนโยบายทั้งหมด */}
@@ -125,53 +191,44 @@ export default function DashboardSection() {
         </Link>
       </div>
 
-      {/* การ์ด 3 ใบ */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* 1 */}
-        <div className="p-4 bg-[#e0f7fa] rounded-lg text-center">
-          <h3 className="font-semibold">นโยบายที่มีงบมากที่สุด</h3>
-          <p className="text-2xl mt-2">{topPolicy?.name || "-"}</p>
-          <h3 className="font-semibold mt-4">มูลค่า</h3>
-          <p className="mt-1 text-2xl">
-              {topPolicy
-    ? topPolicy.total_budget.toLocaleString("th-TH")
-    : "-"} บาท
-          </p>
-        </div>
-
-        {/* 2 */}
-        <div className="p-4 bg-[#f1f8e9] rounded-lg text-center">
-          <h3 className="font-semibold">งบโครงการทั้งหมด</h3>
-          <p className="text-2xl mt-2">
-            {sumAllocated.toLocaleString("th-TH")} บาท
-          </p>
-          <h3 className="font-semibold mt-4">คงเหลือ</h3>
-          <p className="text-2xl mt-2">
-            {netBudget.toLocaleString("th-TH")} บาท
-          </p>
-        </div>
-
-        {/* 3 */}
-        <div className="p-4 bg-[#fff3e0] rounded-lg">
-          <h3 className="font-semibold text-center mb-2">
-            โครงการงบสูงสุด 3 อันดับแรก
-          </h3>
-          <ul className="mt-4 space-y-2">
-            {top3.map((c, i) => (
-              <li key={`${c.id}-${i}`} className="flex items-center space-x-3">
-                {/* badge เลข */}
-                <div className="w-6 h-6 flex items-center justify-center bg-teal-500 text-white rounded-full text-sm font-medium">
-                  {i + 1}
-                </div>
-                {/* ชื่อ + งบ */}
-                <div className="flex-1 flex justify-between">
-                  <span className="truncate">{c.name}</span>
-                  <span>{c.allocated_budget.toLocaleString("th-TH")} บาท</span>
-                </div>
-              </li>
+      {/* Slider Container */}
+      <div className="mt-6 max-w-6xl mx-auto">
+        <div className="overflow-hidden">
+          <div
+            className="flex transition-transform duration-700 ease-in-out"
+            style={{
+              transform: `translateX(-${page * 100}%)`,
+            }}
+          >
+            {slides.map((group, i) => (
+              <div
+                key={i}
+                className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-3 gap-6 px-2"
+              >
+                {group.map((card, idx) => (
+                  <div key={idx} className="w-full">
+                    {card}
+                  </div>
+                ))}
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
+
+        {/* Pagination Dots */}
+        {slides.length > 1 && (
+          <div className="flex justify-center mt-6 space-x-2">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i)}
+                className={`w-3 h-3 rounded-full transition-colors duration-300 ${
+                  page === i ? "bg-[#5D5A88]" : "bg-gray-300 hover:bg-gray-400"
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
