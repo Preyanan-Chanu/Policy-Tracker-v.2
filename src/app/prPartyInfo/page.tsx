@@ -132,10 +132,11 @@ export default function PRPartyInfo() {
 
 
   const deleteMember = async (id: string) => {
-    if (!partyName || !confirm("คุณต้องการลบสมาชิกคนนี้หรือไม่?")) return;
+    if (!partyId || !confirm("คุณต้องการลบสมาชิกคนนี้หรือไม่?")) return;
     try {
       // ✅ ดึงข้อมูลสมาชิกจาก Firestore ก่อนลบ
-      const docRef = doc(firestore, "Party", partyName, "Member", String(id));
+      const docRef = doc(firestore, "Party", partyId!, "Member", String(id));
+
 
       const docSnap = await getDoc(docRef);
       const data = docSnap.data();
@@ -157,8 +158,8 @@ export default function PRPartyInfo() {
       await deleteDoc(docRef);
 
       // ✅ ลบไฟล์จาก Firebase Storage (.jpg และ .png)
-      const jpgRef = ref(storage, `party/member/${partyName}/${id}.jpg`);
-      const pngRef = ref(storage, `party/member/${partyName}/${id}.png`);
+      const jpgRef = ref(storage, `party/member/${partyId}/${id}.jpg`);
+      const pngRef = ref(storage, `party/member/${partyId}/${id}.png`);
 
       try {
         await deleteObject(jpgRef);

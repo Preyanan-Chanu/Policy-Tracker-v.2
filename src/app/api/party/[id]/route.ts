@@ -7,14 +7,14 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  const decodedId = parseInt(decodeURIComponent(id), 10);
+  const decodedId = parseInt(decodeURIComponent(id), 10);  // ✅ ใช้ parseInt เพราะ id เป็น number
 
   const session = driver.session();
   try {
     const result = await session.run(
       `
       MATCH (p:Party {id: $id})
-      RETURN p { .id, .name, .description, .link, } AS party
+      RETURN p { .id, .name, .description, .link } AS party
       `,
       { id: decodedId }
     );
@@ -25,11 +25,14 @@ export async function GET(
 
     return NextResponse.json(result.records[0].get("party"));
   } catch (err) {
+    console.error("Neo4j Error:", err);
     return NextResponse.json({ error: "Failed to fetch party" }, { status: 500 });
   } finally {
     await session.close();
   }
 }
+
+
 
 export async function POST(
   req: NextRequest,
@@ -47,7 +50,7 @@ export async function POST(
       SET p.name = $name,
           p.description = $description,
           p.link = $link,
-      
+          p.logo = $logo
       `,
       { id, name, description, link, logo }
     );
@@ -60,3 +63,4 @@ export async function POST(
     await session.close();
   }
 }
+

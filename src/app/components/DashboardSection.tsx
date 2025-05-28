@@ -36,6 +36,11 @@ const [page, setPage] = useState(0);
 const [top3Policy, setTop3Policy] = useState<Policy[]>([]);
   const [topSpecial, setTopSpecial] = useState<Campaign | null>(null);
   const [sumExpenses, setSumExpenses] = useState<number>(0);
+    const bgColors = [
+    "#EAF8FF", // สีฟ้าอ่อน สำหรับการ์ดใบแรก
+    "#FEF9E7", // สีเหลืองอ่อน สำหรับใบที่สอง
+    "#F7FAF1"  // สีเขียวอ่อน สำหรับใบที่สาม
+  ];
 
 // สร้าง cards array
 const cards = [
@@ -45,28 +50,37 @@ const cards = [
   <DashboardCard key="total-budget" title="งบประมาณรวมทั้งหมด" main={`${sumAllocated.toLocaleString("th-TH")} บาท`} />, 
     <DashboardCard key="total-expense" title="รายจ่ายรวมทั้งหมด" main={`${sumExpenses.toLocaleString("th-TH")} บาท`} />,
     <DashboardCard key="net-budget" title="คงเหลือทั้งหมด" main={`${netBudget.toLocaleString("th-TH")} บาท`} />,
-  <div key="top3-policy" className="p-6 rounded-xl bg-[#f5f8ff] shadow-md text-center">
-      <h3 className="text-xl font-semibold text-[#3f3c62] mb-4">นโยบายที่ได้รับงบสูงสุด 3 อันดับ</h3>
-      <ul className="space-y-3">
-        {top3Policy.map((p, i) => (
-          <li key={`${p.id}-${i}`} className="flex justify-between">
-            <span className="text-[#3f3c62] font-medium truncate">{`${i + 1}. ${p.name}`}</span>
-            <span className="text-[#5D5A88] font-bold">{p.total_budget.toLocaleString("th-TH")} บาท</span>
-          </li>
-        ))}
-      </ul>
-    </div>,
-    <div key="top3-projects" className="p-6 rounded-xl bg-[#f5f8ff] shadow-md text-center">
-      <h3 className="text-xl font-semibold text-[#3f3c62] mb-4">โครงการที่ได้รับงบสูงสุด 3 อันดับ</h3>
-      <ul className="space-y-3">
-        {top3.map((c, i) => (
-          <li key={`${c.id}-${i}`} className="flex justify-between">
-            <span className="text-[#3f3c62] font-medium truncate">{`${i + 1}. ${c.name}`}</span>
-            <span className="text-[#5D5A88] font-bold">{c.allocated_budget.toLocaleString("th-TH")} บาท</span>
-          </li>
-        ))}
-      </ul>
-    </div>,
+   <DashboardCard
+    key="top3-policy"
+    title="นโยบายที่ได้รับงบสูงสุด 3 อันดับ"
+      className="text-[#475066]"  
+    style={{ backgroundColor: bgColors[0] }}
+  >
+    <ul className="space-y-3">
+      {top3Policy.map((p, i) => (
+        <li key={`${p.id}-${i}`} className="flex justify-between">
+          <span className="font-medium truncate">{`${i + 1}. ${p.name}`}</span>
+          <span className="font-bold ">{p.total_budget.toLocaleString("th-TH")} บาท</span>
+        </li>
+      ))}
+    </ul>
+  </DashboardCard>,
+
+  <DashboardCard
+    key="top3-projects"
+    title="โครงการที่ได้รับงบสูงสุด 3 อันดับ"
+      className="text-[#475066]"  
+    style={{ backgroundColor: bgColors[1] }}
+  >
+    <ul className="space-y-3">
+      {top3.map((c, i) => (
+        <li key={`${c.id}-${i}`} className="flex justify-between">
+          <span className="font-medium truncate">{`${i + 1}. ${c.name}`}</span>
+          <span className="font-bold ">{c.allocated_budget.toLocaleString("th-TH")} บาท</span>
+        </li>
+      ))}
+    </ul>
+  </DashboardCard>,
     <DashboardCard key="top-special" title="โครงการพิเศษที่ได้รับงบสูงสุด" main={topSpecial?.name || "-"} sub={`${topSpecial?.allocated_budget.toLocaleString("th-TH") || "-"} บาท`} />,
   ];
 
@@ -150,7 +164,7 @@ useEffect(() => {
         <select
   value={selected}
   onChange={e => setSelected(e.target.value)}
-  className="bg-white text-black px-2 py-1 rounded shadow"
+className="bg-white border border-[#5D5A88] text-[#5D5A88] px-4 py-2 rounded-full shadow-sm hover:shadow-md transition duration-200"
 >
   <option value="all">ร่วมรัฐบาล</option>
   {allParties.map((p) => (
@@ -191,45 +205,60 @@ useEffect(() => {
         </Link>
       </div>
 
-      {/* Slider Container */}
-      <div className="mt-6 max-w-6xl mx-auto">
-        <div className="overflow-hidden">
-          <div
-            className="flex transition-transform duration-700 ease-in-out"
-            style={{
-              transform: `translateX(-${page * 100}%)`,
-            }}
-          >
-            {slides.map((group, i) => (
-              <div
-                key={i}
-                className="w-full flex-shrink-0 grid grid-cols-1 md:grid-cols-3 gap-6 px-2"
-              >
-                {group.map((card, idx) => (
-                  <div key={idx} className="w-full">
-                    {card}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Pagination Dots */}
-        {slides.length > 1 && (
-          <div className="flex justify-center mt-6 space-x-2">
-            {slides.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setPage(i)}
-                className={`w-3 h-3 rounded-full transition-colors duration-300 ${
-                  page === i ? "bg-[#5D5A88]" : "bg-gray-300 hover:bg-gray-400"
-                }`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+{/* Slider Container */}
+<div className="mt-6 max-w-8xl mx-auto px-4">
+  <div className="overflow-hidden">
+    <div
+      className="flex transition-transform duration-700 ease-in-out"
+      style={{ transform: `translateX(-${page * 100}%)` }}
+    >
+      {slides.map((group, i) => (
+        <div
+          key={i}
+          className="flex-shrink-0  min-w-full grid grid-cols-1 md:grid-cols-3 gap-8 px-2"
+        >
+          {group.map((card, idx) => (
+            <div
+              key={idx}
+              className="
+                 w-full       /* กำหนดความกว้างคงที่ */
+                p-6            /* padding ภายใน */
+                rounded-2xl    /* มุมมน */
+                shadow-lg      /* เงา */
+                
+                transition     /* transition สำหรับ hover */
+                duration-300
+              "
+              style={{ backgroundColor: bgColors[idx] }}
+            >
+              {card}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  </div>
+
+  {/* Pagination Dots */}
+  {slides.length > 1 && (
+    <div className="flex justify-center mt-6 space-x-2">
+      {slides.map((_, i) => (
+        <button
+          key={i}
+          onClick={() => setPage(i)}
+          className={`
+            w-3 h-3 rounded-full transition-colors duration-300
+            ${page === i
+              ? "bg-[#5D5A88]"
+              : "bg-gray-300 hover:bg-gray-400"}
+          `}
+        />
+      ))}
+    </div>
+  )}
+</div>
+
     </section>
   );
 }

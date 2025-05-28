@@ -33,9 +33,10 @@ export async function GET() {
       RETURN 
         c.name AS categoryName,
         p.name AS policyName,
-        ID(p) AS policyId,
+        p.id AS policyId,
         p.status AS status,
         party.name AS partyName,
+        party.id AS partyId, 
         collect({ progress: proj.progress, size: proj.size }) AS projects
       ORDER BY c.name
     `);
@@ -49,6 +50,7 @@ export async function GET() {
             const policyId = record.get("policyId").toNumber();
             const status = record.get("status");
             const partyName = record.get("partyName");
+            const partyId = record.get("partyId")?.toNumber?.() ?? null;
             const projects = record.get("projects");
 
             const policyProgress = weightedProjectProgress(projects);
@@ -62,6 +64,7 @@ export async function GET() {
                 name: policyName,
                 status,
                 partyName,
+                partyId,
                 progress: policyProgress,
             });
         }

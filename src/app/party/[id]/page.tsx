@@ -35,81 +35,85 @@ const [partyName, setPartyName] = useState(""); // เพื่อดึงช�
   }, []);
 
   // ดึงข้อมูลพรรคจาก Neo4j
-  useEffect(() => {
-    if (!id) return;
+  // Neo4j: ดึงข้อมูลพรรค (ชื่อ คำอธิบาย ลิงก์ โลโก้)
+useEffect(() => {
+  if (!id) return;
 
-    const fetchPartyData = async () => {
-  try {
-    const res = await fetch(`/api/party/${encodeURIComponent(id)}`);
-    const data = await res.json();
-    setPartyName(data.name);
-    setDescription(data.description || "");
-    setLink(data.link || "");
-    const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${id}.png?alt=media`;
-    setLogo(logoUrl);
-  } catch (error) {
-    console.error("Error loading party from Neo4j:", error);
-  }
-};
-
-    fetchPartyData();
-  }, [id]);
-
-  // ดึงข้อมูลสมาชิกจาก Firestore
-  useEffect(() => {
-    if (!id) return;
-    const membersRef = collection(firestore, "Party", id, "Member");
-
-  
-    const unsubscribe = onSnapshot(membersRef, async (snapshot) => {
-      const membersData: Member[] = await Promise.all(
-  snapshot.docs.map(async (doc) => {
-    const data = doc.data();
-
-    const memberId = doc.id;
-    const firstName: string = data.FirstName || "ไม่ระบุชื่อ";
-    const lastName: string = data.LastName || "ไม่ระบุนามสกุล";
-    const role: string = data.Role || "ไม่ระบุตำแหน่ง";
-    const prefix: string = data.Prefix || "";
-
-    const basePath = `party/member/${id}/${memberId}`;
-    let imageUrl = "/default-profile.png";
-
+  const fetchPartyData = async () => {
     try {
-      const jpgResponse = await fetch(`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/${encodeURIComponent(basePath)}.jpg?alt=media`);
-      if (jpgResponse.ok) {
-        imageUrl = jpgResponse.url;
-      } else {
-        const pngResponse = await fetch(`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/${encodeURIComponent(basePath)}.png?alt=media`);
-        if (pngResponse.ok) {
-          imageUrl = pngResponse.url;
-        }
-      }
-    } catch (err) {
-      console.warn(`⚠️ ไม่พบรูปสมาชิก: ${memberId}`);
-    }
+      const res = await fetch(`/api/party/${encodeURIComponent(id)}`);
+      const data = await res.json();
 
-    return {
-      id: memberId,
-      Prefix: prefix,
-      FirstName: firstName,
-      LastName: lastName,
-      Role: role,
-      Picture: imageUrl,
-    };
-  })
-);
-    
-      const leaderMember = membersData.find((m) => m.Role === "หัวหน้าพรรค") || null;
-      setMembers(membersData);
-      setLeader(leaderMember);
-    });
-    
-    
-    
-  
-    return () => unsubscribe();
-  }, [id]);
+      setPartyName(data.name);
+      setDescription(data.description || "");
+      setLink(data.link || "");
+      const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${id}.png?alt=media`;
+      setLogo(logoUrl);
+    } catch (error) {
+      console.error("Error loading party from Neo4j:", error);
+    }
+  };
+
+  fetchPartyData();
+}, [id]);
+
+// Firestore: ดึงข้อมูลสมาชิก
+useEffect(() => {
+  if (!id) return;
+
+  const membersRef = collection(firestore, "Party", id, "Member");
+
+  const unsubscribe = onSnapshot(membersRef, async (snapshot) => {
+    const membersData: Member[] = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+
+        const memberId = doc.id;
+        const firstName = data.FirstName || "ไม่ระบุชื่อ";
+        const lastName = data.LastName || "ไม่ระบุนามสกุล";
+        const role = data.Role || "ไม่ระบุตำแหน่ง";
+        const prefix = data.Prefix || "";
+
+        const basePath = `party/member/${id}/${memberId}`;
+        let imageUrl = "/default-profile.png";
+
+        try {
+          const jpgResponse = await fetch(
+            `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/${encodeURIComponent(basePath)}.jpg?alt=media`
+          );
+          if (jpgResponse.ok) {
+            imageUrl = jpgResponse.url;
+          } else {
+            const pngResponse = await fetch(
+              `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/${encodeURIComponent(basePath)}.png?alt=media`
+            );
+            if (pngResponse.ok) {
+              imageUrl = pngResponse.url;
+            }
+          }
+        } catch (err) {
+          console.warn(`⚠️ ไม่พบรูปสมาชิก: ${memberId}`);
+        }
+
+        return {
+          id: memberId,
+          Prefix: prefix,
+          FirstName: firstName,
+          LastName: lastName,
+          Role: role,
+          Picture: imageUrl,
+        };
+      })
+    );
+
+    const leaderMember = membersData.find((m) => m.Role === "หัวหน้าพรรค") || null;
+    setMembers(membersData);
+    setLeader(leaderMember);
+  });
+
+  return () => unsubscribe();
+}, [id]);
+console.log(id)
   
 
   return (
@@ -118,11 +122,13 @@ const [partyName, setPartyName] = useState(""); // เพื่อดึงช�
     <div className="font-prompt">
       {isClient ? (
         <>
+          {/* ส่วนบน: ข้อมูลพรรค */}
           <div
             className="bg-cover bg-center"
             style={{ backgroundImage: "url('/bg/พรรค.png')" }}
           >
             <div className="flex flex-row mb-10">
+              {/* ข้อมูลพรรค */}
               <div className="grid grid-rows-3 p-12 w-2/3">
                 <div className="flex gap-20 items-center mb-10">
                   <h1 className="text-white text-[4rem] m-0 font-bold">
@@ -141,12 +147,13 @@ const [partyName, setPartyName] = useState(""); // เพื่อดึงช�
                   {description || "กำลังโหลดข้อมูล..."}
                 </p>
                 <div className="mt-20">
-                  <a href={link} target="_blank" rel="noopener noreferrer">
-                    <button className="w-[200px] px-4 py-3 bg-white mr-4 text-[#5D5A88] text-[20px] rounded-lg">
-                      เว็บไซต์พรรค
-                    </button>
-                  </a>
-
+                  {link && (
+                    <a href={link} target="_blank" rel="noopener noreferrer">
+                      <button className="w-[200px] px-4 py-3 bg-white mr-4 text-[#5D5A88] text-[20px] rounded-lg">
+                        เว็บไซต์พรรค
+                      </button>
+                    </a>
+                  )}
                   <a href={`/partycategory/${encodeURIComponent(id)}`}>
                     <button className="w-[200px] px-4 py-3 bg-white mr-4 text-[#5D5A88] text-[20px] rounded-lg">
                       นโยบายพรรค
@@ -165,7 +172,7 @@ const [partyName, setPartyName] = useState(""); // เพื่อดึงช�
                     <img
                       src={leader.Picture}
                       alt={leader.Role}
-                      className="w-[400px] h-[400px] rounded-full mt-4 shadow-lg"
+                      className="w-[400px] h-[400px] rounded-full mt-4 shadow-lg object-cover"
                       onError={(e) => {
                         const img = e.target as HTMLImageElement;
                         if (!img.dataset.fallbackTried) {
@@ -207,7 +214,7 @@ const [partyName, setPartyName] = useState(""); // เพื่อดึงช�
                       </div>
                       <div className="w-1/2">
                         <img
-                          className="w-[200px] rounded-full"
+                          className="w-[200px] rounded-full object-cover"
                           src={member.Picture}
                           alt={member.FirstName}
                           onError={(e) => {
@@ -236,6 +243,7 @@ const [partyName, setPartyName] = useState(""); // เพื่อดึงช�
     </div>
   </div>
 );
+
 }
 
 export default PartyPage;

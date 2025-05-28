@@ -15,10 +15,11 @@ import { useMemo } from "react";
   interface Policy {
   id: string | number;
   name: string;
-  description?: string; // เผื่อไว้
+  description?: string; 
   partyName: string;
+  partyId: string; 
   status: string;
-  progress: number; // ใหม่
+  progress: number; 
 }
   
   interface Category {
@@ -27,7 +28,7 @@ import { useMemo } from "react";
   policies: Policy[];
 }
 
-  // --- เพิ่ม state เพื่อเก็บนโยบายยอดนิยม ---
+  
   interface PopularPolicy { id: string;   policyName: string; likeCount: number; }
 
   interface RecentPolicy { id: string;   policyName: string; updatedAt: string; }
@@ -46,8 +47,14 @@ const [dashboardData, setDashboardData] = useState<any>(null);
     };
     const [selectedParty, setSelectedParty] = useState<string>("");
     const partyOptions = Array.from(
-    new Set(categories.flatMap(cat => cat.policies.map(p => p.partyName)))
-  );
+  new Map(
+    categories.flatMap(cat =>
+      cat.policies.map(p => [p.partyId, p.partyName])
+    )
+  ).entries()
+);
+
+
     
   const [policies, setPolicies] = useState<any[]>([]);
   const router = useRouter();
@@ -118,22 +125,18 @@ useEffect(() => {
         try {
           const res = await fetch("/api/policy");
           const all: any[] = await res.json();
-          const withLikes = await Promise.all(
-            all.map(async (p) => {
-              const r = await fetch(
-                `/api/policylike?name=${encodeURIComponent(p.policyName)}`
-              );
-             const { like } = await r.json();
-              return {
-                id: p.id,   
-                policyName: p.policyName,
-                likeCount: Number(like) || 0,
-              };
-           })
-          );
-          setPopularPolicies(
-            withLikes.sort((a, b) => b.likeCount - a.likeCount).slice(0, 5)
-          );
+          const top = all
+  .map(p => ({
+    id: p.id,
+    policyName: p.policyName,
+     likeCount: p.like ?? 0
+
+  }))
+  .sort((a, b) => b.likeCount - a.likeCount)
+  .slice(0, 5);
+
+setPopularPolicies(top);
+          
         } catch (e) {
           console.error("❌ fetch popular error:", e);
         }
@@ -218,15 +221,17 @@ useEffect(() => {
        {/* ► ตัวกรองพรรค ใกล้กับ Example Section ► */}
  <div className="flex justify-center mt-3 mb-1 ">
    <select
-     value={selectedParty}
-     onChange={e => setSelectedParty(e.target.value)}
-     className="border rounded-md px-3 py-2 text-[#5D5A88]"
-   >
-     <option value="">ร่วมรัฐบาล</option>
-     {partyOptions.map(name => (
-       <option key={name} value={name}>{name}</option>
-     ))}
-   </select>
+  value={selectedParty}
+  onChange={e => setSelectedParty(e.target.value)}
+  className="bg-white border border-[#5D5A88] text-[#5D5A88] px-4 py-2 rounded-full shadow-sm hover:shadow-md transition duration-200"
+>
+  <option value="">ร่วมรัฐบาล</option>
+  {partyOptions.map(([id, name]) => (
+    <option key={String(id)} value={String(id)}>
+      {name}
+    </option>
+  ))}
+</select>
  </div>
 
   <div className="example-content-2 flex items-center justify-center space-x-20">
@@ -241,8 +246,9 @@ useEffect(() => {
     <div className="flex space-x-10 mt-4">
       {visibleCards.map((category, idx) => {
      const displayPolicies = selectedParty
-       ? category.policies.filter(p => p.partyName === selectedParty)
-       : category.policies;
+  ? category.policies.filter(p => String(p.partyId) === selectedParty)
+  : category.policies;
+
        
      return (
  <div
@@ -270,8 +276,9 @@ useEffect(() => {
            
     <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
   {displayPolicies.slice(0, 5).map((p, i) => {
-    const encodedPartyName = encodeURIComponent(p.partyName);
-    const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
+    // const encodedPartyName = encodeURIComponent(p.partyName);
+const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(p.partyId)}.png?alt=media`;
+console.log("LOGO URL:", logoUrl);
     return (
 
        <li
@@ -300,7 +307,7 @@ useEffect(() => {
           alt={`โลโก้ของ ${p.partyName}`}
           className="w-6 h-6 object-contain ml-3"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = "/default-logo.jpg";
+            (e.target as HTMLImageElement).src = "/default-logo.png";
           }}
         />
       </li>
@@ -369,30 +376,31 @@ useEffect(() => {
 
       {/* Right card: แสดง 5 นโยบายล่าสุด */}
     <div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between transition-transform hover:scale-105">
-      <h3 className="text-2xl font-bold mb-4 text-[#5D5A88] ">
-        นโยบายใหม่ล่าสุด
-      </h3>
-      <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
-        {latestPolicies.slice(0, 5).map((p) => (
-           <li
-              key={p.id}
-              className="flex justify-between items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
-              onClick={() => router.push(`/policydetail/${p.id}`)}  // คลิกแล้วไป detail
-            >
-              <span className="truncate">{p.policyName}</span>
-              
-            </li>
-        ))}
-      </ul>
-      <div className="text-right mt-2">
-        <Link
-          href="/policycategory"
-          className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
+  <div>
+    <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
+      นโยบายใหม่ล่าสุด
+    </h3>
+    <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
+      {latestPolicies.slice(0, 5).map((p) => (
+        <li
+          key={p.id}
+          className="flex justify-between items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
+          onClick={() => router.push(`/policydetail/${p.id}`)}
         >
-          ดูเพิ่มเติม &rarr;
-        </Link>
-      </div>
-    </div>
+          <span className="truncate">{p.policyName}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+  <div className="text-right mt-2">
+    <Link
+      href="/policycategory"
+      className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
+    >
+      ดูเพิ่มเติม &rarr;
+    </Link>
+  </div>
+</div>
   </div>
 
 </section>
