@@ -8,7 +8,7 @@ import { provinceNameMap, provinceToRegion } from "@/app/lib/provinceRegions";
 import { ArrowLeft } from "lucide-react";
 
 interface EventData {
-   id: string;
+  id: string;
   name: string;
   description: string;
   date: string;
@@ -108,10 +108,11 @@ export default function EventPage() {
   }, [selectedRegion]);
 
   useEffect(() => {
-    if (!selectedProvince) {
+    if (selectedProvince === null) {
       fetchEvents(selectedRegion);
     }
-  }, [selectedProvince]);
+  }, [selectedProvince, selectedRegion]);
+
 
 
 
@@ -153,9 +154,17 @@ export default function EventPage() {
               className="px-4 py-2 rounded bg-white text-[#5D5A88] border border-gray-400"
               value={selectedRegion}
               onChange={(e) => {
-                setSelectedRegion(e.target.value);
-                setSelectedProvince(""); // reset province
+                const selected = e.target.value;
+                setSelectedRegion(selected);
+                setSelectedProvince(null);
+
+                if (selected === "ภาคทั้งหมด") {
+                  window.location.reload();
+                } else {
+                  fetchEvents(selected); // โหลดข้อมูลภาคใหม่
+                }
               }}
+
             >
               {regions.map((region) => (
                 <option key={region} value={region}>
@@ -259,53 +268,57 @@ export default function EventPage() {
         ) : (
           // ✅ layout ปกติเมื่อยังไม่เลือกจังหวัด
           <div className="bg-white p-5 text-[#3f3c62] rounded-xl shadow">
-            <div className="flex flex-wrap gap-6 justify-center">
-              {events.map((event, index) => {
-                const partyImage = event.party
-                  ? `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(
-                    event.party
-                  )}.png?alt=media`
-                  : "/default-logo.png";
-                return (
-                  <div
-                    key={index}
-                    className="w-[450px] h-[300px] bg-white shadow-md rounded-lg transition-transform duration-300 border-2 border-[#5D5A88] hover:scale-105 p-4 flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex justify-between items-start">
-                        <h3 className="font-bold text-lg mb-1">
-                          {event.name}
-                        </h3>
-                        <img
-                          className="w-10 h-10 object-contain"
-                          src={partyImage}
-                          alt={`โลโก้ของ ${event.party || "ไม่ทราบพรรค"}`}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                              "/default-logo.png";
-                          }}
-                        />
+            {events.length === 0 ? (
+              <p className="text-center text-gray-500">ไม่มีกิจกรรมในพื้นที่นี้</p>
+            ) : (
+              <div className="flex flex-wrap gap-6 justify-center">
+                {events.map((event, index) => {
+                  const partyImage = event.party
+                    ? `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(
+                      event.party
+                    )}.png?alt=media`
+                    : "/default-logo.png";
+                  return (
+                    <div
+                      key={index}
+                      className="w-[450px] h-[300px] bg-white shadow-md rounded-lg transition-transform duration-300 border-2 border-[#5D5A88] hover:scale-105 p-4 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <h3 className="font-bold text-lg mb-1">
+                            {event.name}
+                          </h3>
+                          <img
+                            className="w-10 h-10 object-contain"
+                            src={partyImage}
+                            alt={`โลโก้ของ ${event.party || "ไม่ทราบพรรค"}`}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                "/default-logo.png";
+                            }}
+                          />
+                        </div>
+                        <p className="text-gray-600 text-sm line-clamp-3">
+                          {event.description}
+                        </p>
+                        <p className="text-sm mt-2">📅 {event.date}</p>
+                        <p className="text-sm">📍 {event.location}</p>
                       </div>
-                      <p className="text-gray-600 text-sm line-clamp-3">
-                        {event.description}
-                      </p>
-                      <p className="text-sm mt-2">📅 {event.date}</p>
-                      <p className="text-sm">📍 {event.location}</p>
+                      <div className="flex justify-end mt-4">
+                        <button
+                          onClick={() =>
+                            router.push(`/eventdetail/${encodeURIComponent(event.id)}`)
+                          }
+                          className="text-[#5D5A88] font-semibold hover:underline"
+                        >
+                          ดูเพิ่มเติม
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex justify-end mt-4">
-                      <button
-                        onClick={() =>
-                          router.push(`/eventdetail/${encodeURIComponent(event.id)}`)
-                        }
-                        className="text-[#5D5A88] font-semibold hover:underline"
-                      >
-                        ดูเพิ่มเติม
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -190,60 +190,11 @@ const idString =
       setStatus(data.status || null); // เก็บค่า status
     };
     
+  });
+
+    
+
   
-
-    // 🔴 2. ดึงจำนวน like จาก API หลังจาก fetchNeo4j()
-    fetch(`/api/campaignlike?name=${encodeURIComponent(name)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const raw = data.like;
-        const count = typeof raw === "number"
-          ? raw
-          : (typeof raw?.toNumber === "function" ? raw.toNumber() : Number(raw));
-        setLikeCount(count || 0);
-      });
-    // 🔴 init isLiked จาก localStorage (จะได้เก็บสถานะคนกดแต่ละเครื่อง)
-    setIsLiked(localStorage.getItem(`liked_${name}`) === "true"); // 🔴 2. ดึงจำนวน like จาก API หลังจาก fetchNeo4j()
-    fetch(`/api/campaignlike?name=${encodeURIComponent(name)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const raw = data.like;
-        const count = typeof raw === "number"
-          ? raw
-          : (typeof raw?.toNumber === "function" ? raw.toNumber() : Number(raw));
-        setLikeCount(count || 0);
-      });
-    // 🔴 init isLiked จาก localStorage (จะได้เก็บสถานะคนกดแต่ละเครื่อง)
-    setIsLiked(localStorage.getItem(`liked_${name}`) === "true");
-  }, [name]);
-
-  const handleLike = async () => {
-    const action = isLiked ? "decrement" : "increment";
-    try {
-      const res = await fetch("/api/campaignlike", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: policyName, action }),
-      });
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data = await res.json();
-      const raw = data.like;
-      const newCount =
-        typeof raw === "number"
-          ? raw
-          : typeof raw?.toNumber === "function"
-            ? raw.toNumber()
-            : Number(raw) || 0;
-      setLikeCount(newCount);
-
-      const newVal = !isLiked;
-      setIsLiked(newVal);
-      localStorage.setItem(`liked_${policyName}`, newVal.toString());
-    } catch (err) {
-      console.error("❌ handleLike error:", err);
-    }
-  };
-
 
   useEffect(() => {
     // สมมติว่าใน Firebase Console คุณอัปโหลดโฟลเดอร์ชื่อตรง ๆ
@@ -483,15 +434,7 @@ const formatMoney = (val: any) =>
                 bgColor={stepMap[status].color}
               />
             )}
-            <button onClick={handleLike} className="focus:outline-none">
-              <Heart
-                size={26}
-                fill={isLiked ? "currentColor" : "none"}
-                className={isLiked ? "text-[#e32222]" : "text-gray-200"}
-              />
-            </button>
-
-            <span className="text-white text-lg">{likeCount}</span>
+            
           </div>
         </div>
 

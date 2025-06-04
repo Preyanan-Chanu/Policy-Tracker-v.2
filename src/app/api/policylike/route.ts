@@ -14,9 +14,9 @@ try {
   console.error("❌ Redis connect error:", err);
 }
 // Rate limiting constants
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 10;  // Max 10 requests per minute per IP
-const LIKE_COOLDOWN = 5 * 1000;      // 5 seconds cooldown between likes
+const RATE_LIMIT_WINDOW = 1 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 100;  // Max 10 requests per minute per IP
+const LIKE_COOLDOWN = 2 * 1000;      // 5 seconds cooldown between likes
 
 // ✅ Safe wrapper: redis.get
 async function safeGet(key: string): Promise<string | null> {

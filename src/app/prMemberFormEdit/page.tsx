@@ -22,6 +22,49 @@ export default function EditMemberForm() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 const [partyId, setPartyId] = useState<string | null>(null);
 
+const resizeImage = (file: File, maxWidth = 500, maxHeight = 500): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth || height > maxHeight) {
+        if (width / height > maxWidth / maxHeight) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        } else {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject("Failed to get canvas context");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject("Failed to resize image");
+      }, "image/jpeg", 0.8);
+    };
+
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+};
+
+
 useEffect(() => {
   const name = localStorage.getItem("partyName") || "";
   const id = localStorage.getItem("partyId");
@@ -82,9 +125,11 @@ useEffect(() => {
   const basePath = `party/member/${partyId}/${memberId}`;
 
   if (imageFile) {
-    const imageRef = ref(storage, `${basePath}.jpg`);
-    await uploadBytes(imageRef, imageFile);
-  }
+  const resizedBlob = await resizeImage(imageFile);
+  const imageRef = ref(storage, `${basePath}.jpg`);
+  await uploadBytes(imageRef, resizedBlob);
+}
+
 
   const docRef = doc(firestore, "Party", partyId, "Member", memberId);
   await updateDoc(docRef, {

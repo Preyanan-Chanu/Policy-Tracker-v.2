@@ -337,7 +337,7 @@ const PolicyPage = () => {
                 className="bg-white col-span-2 rounded-3xl overflow-hidden shadow-lg cursor-pointer hover:shadow-xl transition-all"
               >
                 <img className="rounded-xl" src={category.image} alt={category.name} />
-                <h3 className="text-center">{category.name}</h3>
+                <h3 className="text-center text-2xl my-2">{category.name}</h3>
               </div>
             ))}
           </div>

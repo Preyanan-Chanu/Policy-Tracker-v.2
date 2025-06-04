@@ -35,12 +35,12 @@ export default function PRPage() {
 
 
   return (
-    <div className="min-h-screen bg-white flex">
+    <div className="h-screen bg-white flex overflow-hidden">
       <Sidebar />
 
-      <div className="flex-1 md:ml-64">
+      <div className="flex-1 md:ml-64 flex flex-col overflow-hidden">
         {/* Navbar */}
-        <header className="bg-white p-4 shadow-md flex justify-between items-center sticky top-0 ">
+        <header className="bg-white p-4 shadow-md flex justify-between items-center flex-shrink-0">
           <h1 className="text-2xl font-bold text-[#5D5A88]">
             PR พรรค {partyName}
           </h1>
@@ -66,10 +66,8 @@ export default function PRPage() {
         {menuOpen && <Sidebar isMobile onClose={() => setMenuOpen(false)} />}
 
         {/* Main Content */}
-        <main className="">
-    
+        <main className="flex-1 overflow-hidden">
           <PRGuideBook />
-
         </main>
       </div>
     </div>

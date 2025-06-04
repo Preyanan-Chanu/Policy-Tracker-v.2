@@ -35,7 +35,7 @@
     "react-dom": "^19.0.0",
     "react-pageflip": "^2.0.3",
     "recharts": "^2.15.1",
-    "redis": "^5.1.1",
+    "redis": "^5.5.5",
     "tailwind-merge": "^3.2.0",
     "tailwind-scrollbar-hide": "^2.0.0",
     "tailwindcss-animate": "^1.0.7"
