@@ -5,17 +5,28 @@ import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { Heart } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
+
 
 interface Policy {
   policyId: number;
   policyName: string;
   description: string;
   partyName: string;
+  partyId: number;
   budget: number | null;
   categoryName: string;
   progress: number;
   status: string;
 }
+
+interface Party {
+  id: number;
+  name: string
+}
+
+
+
 
 const statuses = ["ทั้งหมด", "เริ่มนโยบาย", "วางแผน", "ตัดสินใจ", "ดำเนินการ", "ประเมินผล"];
 
@@ -29,7 +40,7 @@ const PolicyCategoryNamePage = () => {
   const [likedState, setLikedState] = useState<Record<number, boolean>>({});
   const [selectedStatus, setSelectedStatus] = useState("ทั้งหมด");
   const [selectedParty, setSelectedParty] = useState("ทั้งหมด");
-  const [partyList, setPartyList] = useState<string[]>([]);
+  const [partyList, setPartyList] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,13 +53,13 @@ const PolicyCategoryNamePage = () => {
       if (selectedStatus !== "ทั้งหมด") query.append("status", selectedStatus);
 
       const res = await fetch(`/api/policycategory/${encodeURIComponent(category)}?${query.toString()}`);
-      
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
       const data = await res.json();
-      
+
       if (data.error) {
         throw new Error(data.message || data.error);
       }
@@ -58,7 +69,7 @@ const PolicyCategoryNamePage = () => {
           // ประมวลผล policyId ให้เป็น number
           let policyId: number;
           const rawId = p.policyId;
-          
+
           if (typeof rawId === "number") {
             policyId = rawId;
           } else if (typeof rawId === "object" && rawId !== null && typeof rawId.low === "number") {
@@ -75,7 +86,7 @@ const PolicyCategoryNamePage = () => {
             policyId: policyId,
           };
         });
-        
+
         setPolicies(processedPolicies);
       } else {
         console.error("⚠️ Invalid API response format:", data);
@@ -96,8 +107,8 @@ const PolicyCategoryNamePage = () => {
       try {
         const res = await fetch("/api/parties");
         if (res.ok) {
-          const data: string[] = await res.json();
-          setPartyList(["ทั้งหมด", ...data]);
+          const data: Party[] = await res.json();
+          setPartyList([{ id: 0, name: "ทั้งหมด" }, ...data]);
         }
       } catch (err) {
         console.error("❌ Error fetching party list:", err);
@@ -116,15 +127,11 @@ const PolicyCategoryNamePage = () => {
     if (policies.length === 0) return;
 
     const initLikedState: Record<number, boolean> = {};
-    
-    // อ่าน like status จาก in-memory storage (เนื่องจากไม่สามารถใช้ localStorage ได้)
     policies.forEach((p) => {
-      initLikedState[p.policyId] = false; // default เป็น false
+      initLikedState[p.policyId] = false; // default false
     });
-    
     setLikedState(initLikedState);
 
-    // ดึงข้อมูล like count จาก API
     const fetchLikesData = async () => {
       for (const policy of policies) {
         try {
@@ -144,33 +151,49 @@ const PolicyCategoryNamePage = () => {
     fetchLikesData();
   }, [policies]);
 
+
   const handleLike = async (policyId: number) => {
-    const isLiked = likedState[policyId];
-    const action = isLiked ? "decrement" : "increment";
+    if (likedState[policyId]) return; // ป้องกันกดซ้ำฝั่ง client
 
     try {
+      const fp = await FingerprintJS.load();
+      const result = await fp.get();
+      const fingerprint = result.visitorId;
+
       const res = await fetch("/api/policylike", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: policyId, action }),
+        body: JSON.stringify({ id: policyId, fingerprint }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data.like;
-        const newCount = typeof raw === "number" ? raw : (raw?.toNumber?.() ?? 0);
-        
-        // อัปเดต like count
-        setLikesMap((prev) => ({ ...prev, [policyId]: newCount }));
-        
-        // อัปเดต like status
-        const newLikedStatus = !isLiked;
-        setLikedState((prev) => ({ ...prev, [policyId]: newLikedStatus }));
+      if (!res.ok) {
+        if (res.status === 403) {
+          console.warn("⛔️ Already liked.");
+          return;
+        }
+        throw new Error(`Status ${res.status}`);
       }
+
+      const data = await res.json();
+      const newCount = typeof data.like === "number"
+        ? data.like
+        : data.like?.toNumber?.() ?? 0;
+
+      setLikesMap((prev) => ({ ...prev, [policyId]: newCount }));
+      setLikedState((prev) => ({ ...prev, [policyId]: true }));
+
     } catch (err) {
       console.error("❌ handleLike error:", err);
     }
   };
+
+  function extractId(id: any): number {
+    if (typeof id?.toNumber === "function") return id.toNumber();
+    if (typeof id === "object" && typeof id.low === "number") return id.low;
+    return Number(id) || 0;
+  }
+
+
 
   return (
     <div className="font-prompt">
@@ -205,9 +228,16 @@ const PolicyCategoryNamePage = () => {
               value={selectedParty}
               onChange={(e) => setSelectedParty(e.target.value)}
             >
-              {partyList.map((party) => (
-                <option key={party} value={party}>{party}</option>
-              ))}
+              {partyList.map((party, idx) => {
+  const name = typeof party === "string" ? party : party.name;
+  return (
+    <option key={name || idx} value={name}>
+      {name}
+    </option>
+  );
+})}
+
+
             </select>
             <select
               className="h-12 px-4 rounded-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-white/50"
@@ -240,12 +270,13 @@ const PolicyCategoryNamePage = () => {
         ) : (
           <div className="mx-20 pb-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
             {policies.map((policy) => {
+              const partyId = extractId(policy.partyId);
               const encodedPartyName = encodeURIComponent(policy.partyName);
-              const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
+              const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${partyId}.png?alt=media`;
 
               return (
-                <div 
-                  key={policy.policyId} 
+                <div
+                  key={policy.policyId}
                   className="relative bg-white rounded-xl p-4 shadow-lg flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-200"
                 >
                   <div>
@@ -254,7 +285,9 @@ const PolicyCategoryNamePage = () => {
                       alt={`โลโก้ของ ${policy.partyName}`}
                       className="absolute top-4 right-4 w-12 h-12 object-contain"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/default-logo.jpg";
+                        const img = e.target as HTMLImageElement;
+                        img.onerror = null;
+                        img.src = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${partyId}.jpg?alt=media`;
                       }}
                     />
                     <h3 className="font-bold text-xl mb-2 pr-16">{policy.policyName}</h3>
@@ -262,7 +295,7 @@ const PolicyCategoryNamePage = () => {
                     <div className="grid grid-cols-2 gap-2 mt-6 text-sm">
                       <p><strong>พรรค:</strong> {policy.partyName}</p>
                       <p><strong>งบประมาณ:</strong> {
-                        policy.budget !== null 
+                        policy.budget !== null
                           ? policy.budget.toLocaleString() + " บาท"
                           : "ไม่ระบุ"
                       }</p>

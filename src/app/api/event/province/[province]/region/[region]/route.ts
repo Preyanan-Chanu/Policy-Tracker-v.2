@@ -39,15 +39,16 @@ export async function GET(
         typeof record.get("id")?.toNumber === "function"
           ? record.get("id").toNumber()
           : record.get("id"),
-      name: record.get("name"),
-      description: record.get("description"),
-      date: record.get("date"),
-      time: record.get("time"),
-      location: record.get("location"),
-      party: record.get("party"),
-      province: record.get("province"),
-      region: record.get("region"),
+      name: record.get("name") ?? "",
+      description: record.get("description") ?? "",
+      date: record.get("date") ?? "",
+      time: record.get("time") ?? "",
+      location: record.get("location") ?? "",
+      party: record.get("party") ?? null,
+      province: record.get("province") ?? decodedProvince,
+      region: record.get("region") ?? decodedRegion,
     }));
+
 
     return NextResponse.json(events);
   } catch (err) {

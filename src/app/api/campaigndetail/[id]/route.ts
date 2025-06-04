@@ -8,22 +8,21 @@ import neo4j from "neo4j-driver";
 
 export async function GET(
   _req: NextRequest,
-    { params }: { params: Promise<{ id?: string }> }
+  { params }: { params: Promise<{ id?: string }> }
 ) {
   // 1) ดึงพารามิเตอร์ id จาก URL แล้ว decode
-  const { id } = await params
-  if (!id) {
-    return NextResponse.json({ error: 'Missing id param' }, { status: 400 })
+  const rawId = (await params).id;
+  if (!rawId || isNaN(Number(rawId))) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
-  const decodedId = decodeURIComponent(id)
+  const decodedId = decodeURIComponent(rawId);
+  const cid = neo4j.int(parseInt(decodedId, 10));
 
-  // 2) แปลงเป็น Neo4j Integer
-  const cid = neo4j.int(parseInt(decodedId, 10))
 
   const session = driver.session()
   try {
     const result = await session.run(
-       `
+      `
       // หา Campaign หลักที่มี c.id = $cid และ Policy ที่สังกัด
       MATCH (c:Campaign { id: $cid })-[:PART_OF]->(p:Policy)
 
@@ -81,36 +80,36 @@ export async function GET(
       { cid }
     )
 
-      if (result.records.length === 0) {
+    if (result.records.length === 0) {
       return NextResponse.json({ error: `ไม่พบข้อมูลโครงการ id=${decodedId}` }, { status: 404 })
     }
 
     const campaign = result.records[0].get('campaign')
 
     const client = await pg.connect()
-try {
-  const pgResult = await client.query(
-    `SELECT allocated_budget FROM campaigns WHERE id = $1`,
-    [decodedId]
-  )
+    try {
+      const pgResult = await client.query(
+        `SELECT allocated_budget FROM campaigns WHERE id = $1`,
+        [decodedId]
+      )
 
-  const expenseResult = await client.query(
-  `SELECT description, amount FROM expenses WHERE campaign_id = $1`,
-  [decodedId]
-);
+      const expenseResult = await client.query(
+        `SELECT description, amount FROM expenses WHERE campaign_id = $1`,
+        [decodedId]
+      );
 
-  const budget = pgResult.rows[0]?.allocated_budget || 0
-  const expenses = expenseResult.rows || []
+      const budget = pgResult.rows[0]?.allocated_budget || 0
+      const expenses = expenseResult.rows || []
 
-  return NextResponse.json({
-    ...campaign,
- 
-    budget,
-    expenses
-  })
-} finally {
-  client.release()
-}
+      return NextResponse.json({
+        ...campaign,
+
+        budget,
+        expenses
+      })
+    } finally {
+      client.release()
+    }
 
   } catch (error: any) {
     console.error('Neo4j Error:', error)

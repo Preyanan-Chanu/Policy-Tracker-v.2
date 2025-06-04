@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         isSpecial,
       };
     });
-          console.log("✅ neoCampaigns ที่ได้จาก Neo4j:", neoCampaigns);
+    console.log("✅ neoCampaigns ที่ได้จาก Neo4j:", neoCampaigns);
 
     // ✅ 2. ดึง budget และ created_at จาก PostgreSQL สำหรับโครงการทั่วไปเท่านั้น
     const validIds = neoCampaigns
@@ -65,10 +65,10 @@ export async function POST(req: NextRequest) {
       const pgResult = await pg.query(
         `SELECT id, allocated_budget, created_at FROM campaigns WHERE id = ANY($1::int[])`,
         [validIds]
-        
+
       );
-        console.log("✅ ข้อมูล validIds ที่ส่งไป query PostgreSQL:", validIds);
-        console.log("✅ ผลลัพธ์ที่ได้จาก PostgreSQL:", pgResult.rows);
+      console.log("✅ ข้อมูล validIds ที่ส่งไป query PostgreSQL:", validIds);
+      console.log("✅ ผลลัพธ์ที่ได้จาก PostgreSQL:", pgResult.rows);
 
       pgCampaigns = pgResult.rows.reduce((acc, row) => {
         acc[row.id] = row;
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
         progress: c.progress,
         policy: c.policy,
         status: c.status,
-        budget: pgCampaigns[c.id!]?.allocated_budget ?? "-",
+        budget: pgCampaigns[c.id!]?.allocated_budget ?? null,
 
         created_at: pgCampaigns[c.id!]?.created_at ?? null,
         area: c.area,
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
         size: c.size,
         isSpecial: c.isSpecial,
       }));
-      console.log("✅ ข้อมูลสุดท้ายที่ส่งกลับไป frontend:", combined);
+    console.log("✅ ข้อมูลสุดท้ายที่ส่งกลับไป frontend:", combined);
 
     return NextResponse.json(combined);
   } catch (error) {

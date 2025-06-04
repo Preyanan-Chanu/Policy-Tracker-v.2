@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PRSidebar from "../components/PRSidebar";
-import { collection, getDocs, getDoc, deleteDoc, doc, } from "firebase/firestore";
+import { collection, getDocs, getDoc, deleteDoc, doc, setDoc } from "firebase/firestore";
 import { firestore } from "@/app/lib/firebase";
 import { storage } from "@/app/lib/firebase";
-import { deleteObject, ref } from "firebase/storage";
+import { deleteObject, ref, uploadBytes } from "firebase/storage";
+import LazyImage from "../components/LazyImage";
+
 
 interface PartyInfo {
   party_des: string;
@@ -17,7 +19,6 @@ interface PartyInfo {
 
 interface Member {
   id: string;
-  prefix: string;
   name: string;
   surname: string;
   role: string;
@@ -30,8 +31,81 @@ export default function PRPartyInfo() {
   const [members, setMembers] = useState<Member[]>([]);
   const [partyId, setPartyId] = useState<string | null>(null);
   const [partyName, setPartyName] = useState<string | null>(null);
+  const pageSize = 9;
+  const [currentPage, setCurrentPage] = useState(1);
+  const observerRef = useRef<HTMLDivElement | null>(null);
+  const [bulkImages, setBulkImages] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const router = useRouter();
 
+  const visibleMembers = members.slice(0, currentPage * pageSize);
+  const hasMore = visibleMembers.length < members.length;
+
+  const resizeImage = (file: File, maxSize = 600): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        if (!e.target?.result) return reject("ไม่พบรูป");
+
+        img.src = e.target.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height *= maxSize / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width *= maxSize / height;
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject("Resize failed");
+          }, "image/jpeg", 0.8);
+        };
+      };
+
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+
+
+  useEffect(() => {
+    if (!observerRef.current || members.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setCurrentPage((prev) => prev + 1);
+        }
+      },
+      {
+        rootMargin: "100px", // ✅ เพิ่มเพื่อให้ตรวจเจอเร็วขึ้น
+        threshold: 0.1,       // ✅ ลดลงเพื่อให้เกิด trigger ง่าย
+      }
+    );
+
+    observer.observe(observerRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [members]);
 
 
 
@@ -46,36 +120,36 @@ export default function PRPartyInfo() {
 
 
   useEffect(() => {
-  if (!partyId || !partyName) return;
+    if (!partyId || !partyName) return;
 
-  const fetchData = async () => {
-    try {
-      const res = await fetch(`/api/pr-partyinfo/${partyId}`);
-      const data = await res.json();
-
-      // ✅ โหลดโลโก้จาก id โดย fallback เป็น .jpg หาก .png ไม่เจอ
-      let logoUrl = "/default-party-logo.png";
+    const fetchData = async () => {
       try {
-        const pngUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.png?alt=media`;
-        const res = await fetch(pngUrl);
-        if (res.ok) {
-          logoUrl = pngUrl;
-        } else {
-          const jpgUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.jpg?alt=media`;
-          const res2 = await fetch(jpgUrl);
-          if (res2.ok) {
-            logoUrl = jpgUrl;
-          }
-        }
-      } catch (err) {
-        console.warn("⚠️ โหลดโลโก้ไม่สำเร็จ:", err);
-      }
+        const res = await fetch(`/api/pr-partyinfo/${partyId}`);
+        const data = await res.json();
 
-      setPartyInfo({
-        party_des: data.description ?? "-",
-        party_link: data.link ?? "-",
-        party_logo: logoUrl,
-      });
+        // ✅ โหลดโลโก้จาก id โดย fallback เป็น .jpg หาก .png ไม่เจอ
+        let logoUrl = "/default-party-logo.png";
+        try {
+          const pngUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.png?alt=media`;
+          const res = await fetch(pngUrl);
+          if (res.ok) {
+            logoUrl = pngUrl;
+          } else {
+            const jpgUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(partyId)}.jpg?alt=media`;
+            const res2 = await fetch(jpgUrl);
+            if (res2.ok) {
+              logoUrl = jpgUrl;
+            }
+          }
+        } catch (err) {
+          console.warn("⚠️ โหลดโลโก้ไม่สำเร็จ:", err);
+        }
+
+        setPartyInfo({
+          party_des: data.description ?? "-",
+          party_link: data.link ?? "-",
+          party_logo: logoUrl,
+        });
 
         const memberSnapshot = await getDocs(collection(firestore, "Party", partyId!, "Member"));
 
@@ -86,38 +160,42 @@ export default function PRPartyInfo() {
             const firstName: string = member.FirstName || "ไม่ระบุชื่อ";
             const lastName: string = member.LastName || "ไม่ระบุนามสกุล";
 
-            const nameParts = firstName.trim().split(" ");
-            const fullName = nameParts.length > 1
-              ? `${nameParts[0]}_${nameParts.slice(1).join("_")}_${lastName}`
-              : `${firstName}_${lastName}`;
             const id = member.id || docSnap.id;
+            const role = member.Role || "-";
 
-            const basePath = `party/member/${partyId}/${member.id}`;
-
+            // 🔁 เตรียมชื่อไฟล์รูปตามรูปแบบ "ชื่อ_นามสกุล"
+            const fileBase = `${firstName}_${lastName}`.replace(/\s+/g, "_");
+            const imagePaths = [
+              `party/member/${partyId}/${fileBase}.jpg`,
+              `party/member/${partyId}/${fileBase}.png`
+            ];
 
             let pictureUrl = "/default-profile.png";
 
-            try {
-              const jpg = await fetch(`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/${encodeURIComponent(basePath)}.jpg?alt=media`);
-              if (jpg.ok) pictureUrl = jpg.url;
-              else {
-                const png = await fetch(`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/${encodeURIComponent(basePath)}.png?alt=media`);
-                if (png.ok) pictureUrl = png.url;
-              }
-            } catch { }
+            for (const path of imagePaths) {
+              try {
+                const res = await fetch(
+                  `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.appspot.com/o/${encodeURIComponent(path)}?alt=media`
+                );
+                if (res.ok) {
+                  pictureUrl = res.url;
+                  break;
+                }
+              } catch { }
+            }
 
             return {
               id,
-              prefix: member.Prefix || "", // ← เพิ่ม
-              name: member.FirstName,
-              surname: member.LastName,
-              role: member.Role,
+              name: firstName,
+              surname: lastName,
+              role,
               image: pictureUrl,
             };
           })
         );
 
         setMembers(memberData);
+
       } catch (error) {
         console.error("Error fetching party info:", error);
       }
@@ -180,6 +258,31 @@ export default function PRPartyInfo() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const fileArray = Array.from(files);
+    setBulkImages(fileArray);
+    setPreviewUrls(fileArray.map((file) => URL.createObjectURL(file)));
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const updatedImages = [...bulkImages];
+    const updatedPreviews = [...previewUrls];
+
+    updatedImages.splice(index, 1);
+    updatedPreviews.splice(index, 1);
+
+    setBulkImages(updatedImages);
+    setPreviewUrls(updatedPreviews);
+  };
+
+  const handleClearAll = () => {
+    setBulkImages([]);
+    setPreviewUrls([]);
+  };
+
   const editMember = (id: string | number) => {
     router.push(`/prMemberFormEdit?editId=${id}`);
   };
@@ -228,36 +331,215 @@ export default function PRPartyInfo() {
             </div>
           )}
 
-          <div className="flex justify-end mt-6">
+          <div className="flex justify-between mt-6">
+
+            <button
+              onClick={async () => {
+                if (!partyId) return;
+                const confirmDelete = confirm("⚠️ ต้องการลบสมาชิกทั้งหมดหรือไม่?");
+                if (!confirmDelete) return;
+
+                const snapshot = await getDocs(collection(firestore, "Party", partyId, "Member"));
+                for (const docSnap of snapshot.docs) {
+                  const id = docSnap.id;
+                  await deleteDoc(doc(firestore, "Party", partyId, "Member", id));
+                  try {
+                    await deleteObject(ref(storage, `party/member/${partyId}/${id}.jpg`));
+                    await deleteObject(ref(storage, `party/member/${partyId}/${id}.png`));
+                  } catch { }
+                }
+
+                alert("✅ ลบสมาชิกทั้งหมดสำเร็จ");
+                location.reload();
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            >
+              🧹 ลบสมาชิกทั้งหมด
+            </button>
+
+            <button
+              onClick={async () => {
+                if (!partyName) return alert("ไม่พบชื่อพรรค");
+                const party = partyName.replace(/^พรรค\s*/, "").trim();
+
+                try {
+                  const res = await fetch(`/api/scrape-member?party=${encodeURIComponent(party)}`);
+                  const data = await res.json();
+                  console.log("จำนวนสมาชิกที่ดึงได้:", data.members?.length);
+
+
+                  if (data.members?.length > 0) {
+                    const confirmUpload = confirm(`ดึงข้อมูล ${data.members.length} คน ต้องการบันทึกทั้งหมดหรือไม่?`);
+                    if (!confirmUpload) return;
+
+                    for (const [index, m] of data.members.entries()) {
+                      const nameParts = m.name.trim().split(" ");
+                      const firstName = nameParts.slice(0, -1).join(" ") || "-";
+                      const lastName = nameParts.slice(-1)[0] || "-";
+
+                      const role = m.role ?? "-";
+
+                      // หาไฟล์รูปจาก public (หรือคุณสามารถเปลี่ยนเป็น upload directory ได้)
+                      const filename = `${firstName}_${lastName}`.replace(/\s+/g, "_");
+                      const inputFile = await fetch(`/members/${filename}.jpg`)
+                        .then(res => res.blob())
+                        .catch(() => null);
+
+                      if (!inputFile) {
+                        console.warn(`ไม่พบรูปภาพสำหรับ ${filename}`);
+                        continue;
+                      }
+
+                      const memberCollection = collection(firestore, `Party/${partyId}/Member`);
+                      const snapshot = await getDocs(memberCollection);
+                      const maxId = Math.max(...snapshot.docs.map(doc => doc.data().id || 0), 0);
+                      const newId = maxId + 1;
+
+                      const imageRef = ref(storage, `party/member/${partyId}/${newId}.jpg`);
+                      await uploadBytes(imageRef, inputFile);
+
+                      const docRef = doc(firestore, `Party/${partyId}/Member`, String(newId));
+                      await setDoc(docRef, {
+                        FirstName: firstName,
+                        LastName: lastName,
+                        Role: role,
+                        Picture: `/member/${newId}.jpg`,
+                        id: newId,
+                      });
+                      console.log(`✅ เพิ่ม ${firstName} ${lastName}`);
+                    }
+
+                    alert("✅ บันทึกสมาชิกทั้งหมดสำเร็จ");
+                    router.refresh();
+                  } else {
+                    alert("ไม่พบข้อมูลสมาชิก");
+                  }
+                } catch (err) {
+                  console.error("❌ ดึงข้อมูลล้มเหลว", err);
+                  alert("เกิดข้อผิดพลาด");
+                }
+              }}
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+            >
+              📥 ดึงข้อมูลสมาชิกจาก กกต.
+            </button>
+
+
             <button onClick={goToMemberForm} className="bg-[#5D5A88] text-white px-4 py-2 rounded-md hover:bg-[#46426b]">
               ➕ เพิ่มข้อมูลสมาชิก
             </button>
           </div>
 
-          <h2 className="text-3xl text-white text-center mt-6">สมาชิกพรรค</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-4">
-            {members.map((member) => (
-              <div key={member.id} className="bg-white p-4 rounded-lg shadow-lg text-center">
-                <img src={member.image} alt={member.name} className="w-24 h-24 mx-auto rounded-full shadow-md" />
-                <p className="mt-2 font-semibold">
-                  {member.prefix ? `${member.prefix} ` : ""}{member.name} {member.surname}
-                </p>
-                <p className="text-gray-600">{member.role}</p>
-                <div className=" mt-4">
-                  <button
-                    onClick={() => editMember(member.id)}
-                    className="m-2 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600"
-                  >
-                    ✏ แก้ไข
-                  </button>
 
-                  <button onClick={() => deleteMember(member.id)} className="m-2 bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-700">
-                    ❌ ลบ
+          <div className="flex justify-center mt-6 flex-col items-center">
+
+            <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+              📁 เลือกรูปสมาชิก
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
+
+            {/* แสดงจำนวน */}
+            {bulkImages.length > 0 && (
+              <p className="mt-2 text-white">{bulkImages.length} ไฟล์ที่เลือกแล้ว</p>
+            )}
+
+            {/* แสดงรูปทั้งหมด */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+              {previewUrls.map((url, idx) => (
+                <div key={idx} className="relative">
+                  <img
+                    src={url}
+                    alt={`preview-${idx}`}
+                    className="w-32 h-32 object-cover rounded shadow-md mx-auto"
+                  />
+                  <button
+                    onClick={() => handleRemoveImage(idx)}
+                    className="absolute top-0 right-0 bg-red-500 text-white rounded-full px-2 py-1 text-sm hover:bg-red-700"
+                  >
+                    ✕
                   </button>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* ปุ่มลบทั้งหมด */}
+            {bulkImages.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="mt-4 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                🗑 ลบรูปทั้งหมด
+              </button>
+            )}
+
+            {bulkImages.length > 0 && (
+              <button
+                onClick={async () => {
+                  if (!partyId || !bulkImages?.length) return;
+
+                  for (const file of Array.from(bulkImages)) {
+                    const rawName = file.name.replace(/\.[^.]+$/, "");
+                    const ext = file.name.split(".").pop();
+                    const encodedName = rawName.replace(/\s+/g, "_");
+
+                    const imageRef = ref(storage, `party/member/${partyId}/${encodedName}.${ext}`);
+
+                    try {
+                      const resizedBlob = await resizeImage(file); // 👈 resize ก่อน
+                      await uploadBytes(imageRef, resizedBlob);
+                      console.log(`✅ อัปโหลดรูป ${encodedName}.${ext}`);
+                    } catch (err) {
+                      console.error(`❌ ไม่สามารถอัปโหลดรูป ${encodedName}.${ext}`, err);
+                    }
+                  }
+
+                  alert("✅ อัปโหลดรูปภาพทั้งหมดสำเร็จ");
+                }}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 mt-4"
+              >
+                📁 อัปโหลดรูปสมาชิก
+              </button>
+            )}
           </div>
+
+
+
+          <h2 className="text-3xl text-white text-center mt-6">สมาชิกพรรค</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-4">
+            {members
+              .slice(0, currentPage * pageSize)
+              .map((member) => (
+                <div key={member.id} className="bg-white p-4 rounded-lg shadow-lg text-center">
+                  <LazyImage
+                    src={member.image}
+                    alt={member.name}
+                    className="w-24 h-24 mx-auto rounded-full shadow-md"
+                  />
+                  <p className="mt-2 font-semibold">
+                    {member.name} {member.surname}
+                  </p>
+                  <p className="text-gray-600">{member.role}</p>
+                  <div className=" mt-4">
+                    <button
+                      onClick={() => editMember(member.id)}
+                      className="m-2 bg-yellow-500 text-white px-3 py-1 rounded-md hover:bg-yellow-600"
+                    >
+                      ✏ แก้ไข
+                    </button>
+                    <button onClick={() => deleteMember(member.id)} className="m-2 bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-700">
+                      ❌ ลบ
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+          <div ref={observerRef} className="h-10 mt-10" />
         </main>
       </div>
     </div>

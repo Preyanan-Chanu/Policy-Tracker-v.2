@@ -29,8 +29,10 @@ export async function GET(req: NextRequest) {
 
     const result = await session.run(
       `
-      MATCH (p:Policy)-[:BELONGS_TO]->(party:Party)
-      OPTIONAL MATCH (p)-[:HAS_CATEGORY]->(c:Category)
+      MATCH (p:Policy)
+MATCH (p)-[:BELONGS_TO]->(party:Party)
+OPTIONAL MATCH (p)-[:HAS_CATEGORY]->(c:Category)
+
       ${whereClause}
       RETURN 
         p.id AS policyId, 
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
         p.progress AS progress,
         p.like AS like,
         party.name AS partyName,
+        party.id AS partyId,  
         c.name AS categoryName
       ORDER BY p.id
       `,
@@ -52,7 +55,7 @@ export async function GET(req: NextRequest) {
     const neoPolicies = result.records.map((r, idx) => {
       const rawId = r.get("policyId");
       let policyId: number;
-      
+
       if (typeof rawId === "number") {
         policyId = rawId;
       } else if (typeof rawId === "object" && rawId?.low !== undefined) {
@@ -72,8 +75,9 @@ export async function GET(req: NextRequest) {
         progress: r.get("progress"),
         like: r.get("like"),
         partyName: r.get("partyName"),
+        partyId: r.get("partyId"),
         categoryName: r.get("categoryName"),
-        uniqueKey: `neo_policy_${policyId}_${idx}_${Date.now()}`,
+        uniqueKey: `neo_policy_${policyId}_${idx}`,
       };
     });
 
@@ -105,6 +109,7 @@ export async function GET(req: NextRequest) {
       progress: Number(p.progress) || 0,
       like: Number(p.like) || 0,
       partyName: String(p.partyName || ""),
+      partyId: Number(p.partyId) || 0,
       categoryName: String(p.categoryName || ""),
       budget: budgetMap[p.policyId] ?? 0,
       uniqueKey: p.uniqueKey,
@@ -115,9 +120,9 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error("❌ API /api/policycategory error:", err);
-    return NextResponse.json({ 
-      error: "Internal error", 
-      message: err instanceof Error ? err.message : "Unknown error" 
+    return NextResponse.json({
+      error: "Internal error",
+      message: err instanceof Error ? err.message : "Unknown error"
     }, { status: 500 });
   } finally {
     await session.close();

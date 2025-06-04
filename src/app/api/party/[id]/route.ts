@@ -44,6 +44,11 @@ export async function POST(
   try {
     const { name, description, link, logo } = await req.json();
 
+    if (typeof name !== "string" || !name.trim()) {
+  return NextResponse.json({ error: "Invalid name" }, { status: 400 });
+}
+
+
     await session.run(
       `
       MERGE (p:Party {id: $id})

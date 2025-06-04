@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
-import { Heart } from "lucide-react";
+import { Heart, AlertCircle } from "lucide-react";
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 const categories = [
   { name: "เศรษฐกิจ", image: "/เศรษฐกิจ.jpg" },
@@ -23,6 +24,7 @@ interface Policy {
   status: string;
   progress: number;
   partyName: string;
+  partyId: number;
   categoryName: string;
   budget: number;
   uniqueKey: string;
@@ -38,10 +40,36 @@ const PolicyPage = () => {
   const [showAll, setShowAll] = useState(false);
   const [likesMap, setLikesMap] = useState<Record<number, number>>({});
   const [likedState, setLikedState] = useState<Record<number, boolean>>({});
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [isLiking, setIsLiking] = useState<Record<number, boolean>>({});
+  const [errorMessage, setErrorMessage] = useState<string>("");
+
+  // Enhanced fingerprint loading with error handling
+  useEffect(() => {
+    const loadFingerprint = async () => {
+      try {
+        const fp = await FingerprintJS.load();
+        const result = await fp.get();
+        console.log("📌 Fingerprint loaded:", result.visitorId);
+        setFingerprint(result.visitorId);
+      } catch (error) {
+        console.error("❌ Error loading fingerprint:", error);
+        // Fallback to a basic browser fingerprint
+        const fallbackFingerprint = btoa(
+          navigator.userAgent +
+          screen.width +
+          screen.height +
+          new Date().getTimezoneOffset()
+        ).substring(0, 16);
+        setFingerprint(fallbackFingerprint);
+      }
+    };
+    loadFingerprint();
+  }, []);
 
   const fetchPolicies = async () => {
     if (!showAll) return;
-    
+
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
@@ -56,7 +84,7 @@ const PolicyPage = () => {
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      
+
       const data = await res.json();
       console.log("📥 API Response:", data);
 
@@ -79,6 +107,7 @@ const PolicyPage = () => {
           status: String(p.status || "ไม่ระบุสถานะ"),
           progress: Number(p.progress) || 0,
           partyName: String(p.partyName || "ไม่ระบุพรรค"),
+          partyId: Number(p.partyId) || 0,
           categoryName: String(p.categoryName || "ไม่ระบุหมวดหมู่"),
           budget: Number(p.budget) || 0,
           uniqueKey: `policy_${policyId}_${idx}_${Date.now()}`,
@@ -87,7 +116,7 @@ const PolicyPage = () => {
 
       setPolicies(processedPolicies);
       console.log("✅ Processed policies:", processedPolicies.length);
-      
+
     } catch (err) {
       console.error("❌ Error fetching policies:", err);
       setPolicies([]);
@@ -96,57 +125,114 @@ const PolicyPage = () => {
     }
   };
 
-  // Init likedState และ fetch like count
+  // Enhanced like state initialization
   useEffect(() => {
-    if (policies.length === 0) return;
-    
-    const init: Record<number, boolean> = {};
-    
-    policies.forEach((p) => {
-      const key = `liked_${p.policyId}`;
-      const stored = localStorage.getItem(key);
-      init[p.policyId] = stored === "true";
+    if (policies.length === 0 || !fingerprint) return;
 
-      // Fetch like count
-      fetch(`/api/policylike?id=${p.policyId}`)
-        .then((res) => res.json())
-        .then((data) => {
+    const fetchLikeStates = async () => {
+      const promises = policies.map(async (p) => {
+        try {
+          const res = await fetch(`/api/policylike?id=${p.policyId}&fingerprint=${fingerprint}`);
+          if (!res.ok) {
+            console.warn(`Failed to fetch like state for policy ${p.policyId}`);
+            return { policyId: p.policyId, count: 0, liked: false };
+          }
+
+          const data = await res.json();
           const count = Number(data.like) || 0;
-          setLikesMap((prev) => ({ ...prev, [p.policyId]: count }));
-        })
-        .catch(err => console.error("Error fetching likes:", err));
-    });
-    
-    setLikedState(init);
-  }, [policies]);
+          const liked = Boolean(data.isLiked);
 
-  // Toggle like
-  const handleLike = async (policyId: number) => {
-    const isLiked = likedState[policyId];
-    const action = isLiked ? "decrement" : "increment";
-
-    try {
-      const res = await fetch("/api/policylike", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: policyId, action }),
+          return { policyId: p.policyId, count, liked };
+        } catch (error) {
+          console.error(`Error fetching like state for policy ${p.policyId}:`, error);
+          return { policyId: p.policyId, count: 0, liked: false };
+        }
       });
 
-      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const results = await Promise.all(promises);
 
-      const data = await res.json();
-      const newCount = Number(data.like) || 0;
-      
-      setLikesMap((prev) => ({ ...prev, [policyId]: newCount }));
+      const newLikesMap: Record<number, number> = {};
+      const newLikedState: Record<number, boolean> = {};
 
-      const newVal = !isLiked;
-      localStorage.setItem(`liked_${policyId}`, newVal.toString());
-      setLikedState((prev) => ({ ...prev, [policyId]: newVal }));
-      
-    } catch (err) {
-      console.error("❌ handleLike error:", err);
+      results.forEach(({ policyId, count, liked }) => {
+        newLikesMap[policyId] = count;
+        newLikedState[policyId] = liked;
+      });
+
+      setLikesMap(newLikesMap);
+      setLikedState(newLikedState);
+    };
+
+    fetchLikeStates();
+  }, [policies, fingerprint]);
+
+  // Enhanced like handler with better error handling
+  const handleLike = async (policyId: number) => {
+  const pid = Number(policyId);
+  console.log("🖱️ กดไลก์ policy:", pid);
+
+  if (!fingerprint) {
+    setErrorMessage("ระบบกำลังโหลด กรุณารอสักครู่");
+    return;
+  }
+
+  if (isLiking[pid]) {
+    console.warn("⚠️ กำลังประมวลผลอยู่");
+    return;
+  }
+
+  setIsLiking(prev => ({ ...prev, [pid]: true }));
+  setErrorMessage("");
+
+  try {
+    const res = await fetch("/api/policylike", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: pid, fingerprint }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      switch (res.status) {
+        case 403:
+          if (data.error.includes("network")) {
+            setErrorMessage("มีการกดไลค์นโยบายนี้จากเครือข่ายนี้แล้ว");
+          } else if (data.error.includes("Suspicious")) {
+            setErrorMessage("ตรวจพบการใช้งานที่ผิดปกติ กรุณาลองใหม่ในภายหลัง");
+          } else {
+            setErrorMessage("ไม่สามารถกดไลก์ได้ในขณะนี้");
+          }
+          break;
+        case 429:
+          setErrorMessage("กดไลก์บ่อยเกินไป กรุณารอสักครู่");
+          break;
+        default:
+          setErrorMessage("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
+      }
+      return;
     }
-  };
+
+    const newCount = Number(data.like) || 0;
+    const action = data.action;
+
+    setLikesMap(prev => ({ ...prev, [pid]: newCount }));
+    setLikedState(prev => ({ ...prev, [pid]: action === "liked" }));
+
+    console.log(`✅ ${action} policy ${pid}, new count: ${newCount}`);
+  } catch (error) {
+    console.error("❌ handleLike error:", error);
+    setErrorMessage("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
+  } finally {
+    console.log("🧹 Reset isLiking for:", pid);
+    setIsLiking(prev => ({ ...prev, [pid]: false }));
+
+    setTimeout(() => {
+      setErrorMessage("");
+    }, 5000);
+  }
+};
+
 
   // ดึงรายชื่อพรรค
   useEffect(() => {
@@ -154,15 +240,15 @@ const PolicyPage = () => {
       try {
         const res = await fetch("/api/parties");
         if (!res.ok) throw new Error(`Status ${res.status}`);
-        
+
         const data = await res.json();
         console.log("📥 Parties data:", data);
-        
+
         // ตรวจสอบว่า data เป็น array ของ string
-        const parties = Array.isArray(data) 
+        const parties = Array.isArray(data)
           ? data.filter(p => typeof p === 'string')
           : [];
-          
+
         setPartyList(parties);
       } catch (err) {
         console.error("❌ Error fetching parties:", err);
@@ -196,7 +282,41 @@ const PolicyPage = () => {
     (selectedStatus === "ทั้งหมด" || p.status === selectedStatus)
   );
 
-  console.log("🎯 Filtered policies count:", filteredPolicies.length);
+  // Enhanced Like Button Component
+  const LikeButton = ({
+    policyId,
+    isLiked,
+    isProcessing,
+    count,
+    onLike,
+  }: {
+    policyId: number;
+    isLiked: boolean;
+    isProcessing: boolean;
+    count: number;
+    onLike: (id: number) => void;
+  }) => (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onLike(policyId);
+      }}
+      disabled={isProcessing}
+      className={`
+      flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200
+      ${isLiked ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+      ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+    `}
+    >
+      <Heart size={20} className={isLiked ? 'fill-current' : ''} />
+      <span className="font-medium">
+        {isProcessing ? '...' : count}
+      </span>
+      {isProcessing && (
+        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+      )}
+    </button>
+  );
 
   return (
     <div className="font-prompt">
@@ -296,7 +416,7 @@ const PolicyPage = () => {
               <div className="mx-20 pb-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {filteredPolicies.map((policy) => {
                   const encodedPartyName = encodeURIComponent(policy.partyName);
-                  const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodedPartyName}.png?alt=media`;
+                  const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${policy.partyId}.png?alt=media`;
                   const likeCount = likesMap[policy.policyId] ?? 0;
 
                   return (
@@ -313,7 +433,7 @@ const PolicyPage = () => {
                           (e.target as HTMLImageElement).src = "/default-logo.jpg";
                         }}
                       />
-                      
+
                       <div>
                         <p className="text-lg font-bold text-[#5D5A88] mb-2">
                           {policy.policyName}
@@ -329,24 +449,18 @@ const PolicyPage = () => {
                           <p><strong>สถานะ:</strong> {policy.status}</p>
                         </div>
                       </div>
-                      
+
                       <div className="mt-6 flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLike(policy.policyId);
-                            }}
-                            className="hover:opacity-80"
-                          >
-                            <Heart
-                              size={20}
-                              fill={likedState[policy.policyId] ? "currentColor" : "none"}
-                              className={likedState[policy.policyId] ? "text-[#EF4444]" : "text-gray-400"}
-                            />
-                          </button>
-                          <span className="text-sm text-gray-700">{likeCount}</span>
-                        </div>
+                        <LikeButton
+                          policyId={policy.policyId}
+                          isLiked={likedState[policy.policyId] || false}
+                          isProcessing={isLiking[policy.policyId] || false}
+                          count={likesMap[policy.policyId] || 0}
+                          onLike={handleLike}
+                        />
+
+
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

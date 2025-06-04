@@ -29,17 +29,17 @@ export async function GET(
     );
 
     const events = result.records.map((record) => ({
-      id:
-        typeof record.get("id")?.toNumber === "function"
-          ? record.get("id").toNumber()
-          : record.get("id"),
-      name: record.get("name"),
-      description: record.get("description"),
-      date: record.get("date"),
-      time: record.get("time"),
-      location: record.get("location"),
-      party: record.get("party"),
-    }));
+  id:
+    typeof record.get("id")?.toNumber === "function"
+      ? record.get("id").toNumber()
+      : record.get("id"),
+  name: record.get("name") ?? "",
+  description: record.get("description") ?? "",
+  date: record.get("date") ?? "",
+  time: record.get("time") ?? "",
+  location: record.get("location") ?? "",
+  party: record.get("party") ?? null,
+}));
 
     return NextResponse.json(events);
   } catch (err) {

@@ -32,12 +32,12 @@ export async function GET(
         typeof record.get("id")?.toNumber === "function"
           ? record.get("id").toNumber()
           : record.get("id"),
-      name: record.get("name"),
-      description: record.get("description"),
-      date: record.get("date"),
-      location: record.get("location"),
-      party: record.get("party"),
-      region: record.get("region"),
+      name: record.get("name") ?? "",
+      description: record.get("description") ?? "",
+      date: record.get("date") ?? "",
+      location: record.get("location") ?? "",
+      party: record.get("party") ?? null,
+      region: record.get("region") ?? "",
     }));
 
     return NextResponse.json(events);

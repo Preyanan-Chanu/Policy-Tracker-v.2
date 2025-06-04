@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 
 export async function GET(req: NextRequest) {
-  const party = req.nextUrl.searchParams.get("party");
+  const url = new URL(req.url);  // ✅ แก้ตรงนี้
+  const party = url.searchParams.get("party");
 
   const session = driver.session();
   try {
-    const res = await session.run(`
+    const res = await session.run(
+      `
       MATCH (p:Policy)-[:BELONGS_TO]->(party:Party)
       ${party ? "WHERE party.name = $party" : ""}
       OPTIONAL MATCH (p)<-[:PART_OF]-(c:Campaign)
@@ -16,7 +18,9 @@ export async function GET(req: NextRequest) {
         count(c) AS totalProjects,
         avg(CASE WHEN c.type = "โครงการพิเศษ" THEN c.progress ELSE NULL END) AS specialProgress
       RETURN policyProgress, projectProgress, totalProjects, specialProgress
-    `, { party });
+    `,
+      party ? { party } : {}
+    );
 
     const record = res.records[0];
     return NextResponse.json({
@@ -26,6 +30,7 @@ export async function GET(req: NextRequest) {
       specialProgress: record.get("specialProgress") || 0,
     });
   } catch (e) {
+    console.error("Neo4j error:", e);
     return NextResponse.json({ error: "Fetch summary failed" }, { status: 500 });
   } finally {
     await session.close();

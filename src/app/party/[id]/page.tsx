@@ -8,7 +8,6 @@ import Footer from "@/app/components/Footer";
 
 interface Member {
   id: string;
-  Prefix?: string;
   FirstName: string;
   LastName: string;
   Role?: string;
@@ -72,7 +71,6 @@ useEffect(() => {
         const firstName = data.FirstName || "ไม่ระบุชื่อ";
         const lastName = data.LastName || "ไม่ระบุนามสกุล";
         const role = data.Role || "ไม่ระบุตำแหน่ง";
-        const prefix = data.Prefix || "";
 
         const basePath = `party/member/${id}/${memberId}`;
         let imageUrl = "/default-profile.png";
@@ -97,7 +95,6 @@ useEffect(() => {
 
         return {
           id: memberId,
-          Prefix: prefix,
           FirstName: firstName,
           LastName: lastName,
           Role: role,
@@ -184,7 +181,7 @@ console.log(id)
                       }}
                     />
                     <p className="text-white text-[32px] font-semibold">
-                      {`${leader.Prefix || ""} ${leader.FirstName} ${leader.LastName}`}
+                      {`${leader.FirstName} ${leader.LastName}`}
                     </p>
                   </>
                 ) : (
@@ -209,7 +206,7 @@ console.log(id)
                       <div className="w-1/2">
                         <h4 className="text-[#5D5A88] text-[1.5rem]">{member.Role}</h4>
                         <p className="text-[#5D5A88]">
-                          {`${member.Prefix || ""} ${member.FirstName} ${member.LastName}`}
+                          {`${member.FirstName} ${member.LastName}`}
                         </p>
                       </div>
                       <div className="w-1/2">

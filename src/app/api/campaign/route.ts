@@ -49,15 +49,16 @@ export async function GET(req: NextRequest) {
       const budget = budgetResult.rows[0]?.allocated_budget ?? null;
 
       const data = {
-  id,
-  name,
-  description,
-  status,
-  policy: policyName,   // ✅ ส่ง string
-  party: partyName,     // ✅ ส่ง string
-  size,
-  budget,
-};
+        id,
+        name,
+        description,
+        status,
+        policy: policyName,
+        party: partyName,
+        party_id: partyId,
+        size,
+        budget,
+      };
 
       if (isSpecial) {
         specialCampaigns.push(data);
@@ -72,5 +73,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });
   } finally {
     await session.close();
+    try {
+      client.release();
+    } catch (e) {
+      console.error("❗ Failed to release Postgres client", e);
+    }
   }
 }

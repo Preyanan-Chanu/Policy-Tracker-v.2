@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       SET p.name = $name,
           p.description = $description,
           p.banner = $banner,
-          p.status = $status,         // 👈 ใช้ค่าที่เลือก
+          p.status = $status,       
           p.like = 0,
           p.progress = "0%"
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       MATCH (pt:Party {name: $party})
       MERGE (p)-[:BELONGS_TO]->(pt)
       `,
-      { id, name, description, banner, category, party: cleanedParty, status } // 👈 ส่งค่า status
+      { id, name, description, banner, category, party: cleanedParty, status } 
     );
 
     return NextResponse.json({ message: "สร้างนโยบายสำเร็จ", id });

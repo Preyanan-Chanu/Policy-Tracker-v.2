@@ -10,6 +10,10 @@ export async function DELETE(
 ) {
   const uid = params.uid;
 
+  if (!uid) {
+  return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+}
+
   try {
     await deleteDoc(doc(firestore, "users", uid)); // ลบจาก Firestore
     await getAuth(app).deleteUser(uid); // ลบจาก Authentication
@@ -17,5 +21,5 @@ export async function DELETE(
   } catch (err) {
     console.error("❌ Delete error:", err);
     return NextResponse.json({ error: "ลบไม่สำเร็จ" }, { status: 500 });
-  }
+  } 
 }

@@ -54,7 +54,20 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { name, description, date, time, location, map, policy, partyId, province, campaign, status } = await req.json();
+  const {
+    name,
+    description,
+    date,
+    time,
+    location,
+    map,
+    policy,
+    partyId,
+    province,
+    campaign,
+    status,
+  } = await req.json();
+
   const region = provinceToRegion[province];
   if (!region) {
     return NextResponse.json({ error: "ไม่พบภาคของจังหวัดนี้" }, { status: 400 });
@@ -63,6 +76,7 @@ export async function POST(req: NextRequest) {
   const session = driver.session();
 
   try {
+    // ตรวจสอบชื่อซ้ำ
     const check = await session.run(
       `MATCH (e:Event {name: $name}) RETURN e LIMIT 1`,
       { name }
@@ -71,10 +85,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "มีชื่อกิจกรรมนี้อยู่แล้ว กรุณาใช้ชื่ออื่น" }, { status: 400 });
     }
 
+    // หา id ถัดไป
     const maxIdResult = await session.run(`MATCH (e:Event) RETURN MAX(e.id) AS maxId`);
     const maxIdRecord = maxIdResult.records[0];
     const nextId = (maxIdRecord?.get("maxId")?.toNumber?.() || 0) + 1;
 
+    // สร้าง Event และความสัมพันธ์
     const result = await session.run(
       `
       CREATE (e:Event {
@@ -132,8 +148,9 @@ export async function POST(req: NextRequest) {
     if (!record) {
       return NextResponse.json({ error: "สร้างกิจกรรมไม่สำเร็จ: ไม่พบ ID" }, { status: 500 });
     }
+
     const rawId = record.get("id");
-const newEventId = typeof rawId?.toNumber === "function" ? rawId.toNumber() : rawId;
+    const newEventId = typeof rawId?.toNumber === "function" ? rawId.toNumber() : rawId;
 
     return NextResponse.json({ message: "สร้างกิจกรรมสำเร็จ", id: newEventId });
   } catch (err) {
@@ -155,6 +172,12 @@ export async function PUT(req: NextRequest) {
 
   const session = driver.session();
   try {
+    const region = provinceToRegion[province];
+    if (!region) {
+      return NextResponse.json({ error: "ไม่พบภาคของจังหวัดนี้" }, { status: 400 });
+    }
+
+    // อัปเดตข้อมูลหลัก
     await session.run(
       `
       MATCH (e:Event {id: toInteger($id)})
@@ -169,6 +192,7 @@ export async function PUT(req: NextRequest) {
       { id, name, description, date, time, location, map, status }
     );
 
+    // ลบความสัมพันธ์เดิม
     await session.run(
       `
       MATCH (e:Event {id: toInteger($id)})
@@ -180,6 +204,7 @@ export async function PUT(req: NextRequest) {
       { id }
     );
 
+    // เพิ่มความสัมพันธ์ใหม่ (Policy)
     if (policy) {
       await session.run(
         `
@@ -190,6 +215,7 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    // เพิ่มความสัมพันธ์ใหม่ (Campaign)
     if (campaign && campaign.trim() !== "") {
       await session.run(
         `
@@ -200,14 +226,17 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    if (province) {
+    // เพิ่มจังหวัดและภาค (Province + Region)
+    if (province && region) {
       await session.run(
         `
         MATCH (e:Event {id: toInteger($id)})
         MERGE (prov:Province {name: $province})
+        MERGE (reg:Region {name: $region})
+        MERGE (prov)-[:IN_REGION]->(reg)
         MERGE (e)-[:LOCATED_IN]->(prov)
         `,
-        { id, province }
+        { id, province, region }
       );
     }
 
@@ -219,3 +248,4 @@ export async function PUT(req: NextRequest) {
     await session.close();
   }
 }
+

@@ -7,18 +7,20 @@ export async function GET() {
   try {
     const result = await session.run(`
       MATCH (c:Category)<-[:HAS_CATEGORY]-(p:Policy)-[:BELONGS_TO]->(party:Party)
-      WITH c.name AS categoryName,
-           collect({
-             id: toString(p.id),
-             name: p.name,
-             description: p.description,
-             partyName: party.name,
-             status: p.status,           // ← ใส่ comma ตรงนี้
-             updatedAt: p.updatedAt      // ← แม็ปรายการ updatedAt แบบ key: value
-           }) AS policies
-      RETURN categoryName, policies
-      ORDER BY categoryName
-      LIMIT 8
+WITH c, p, party
+ORDER BY p.updatedAt DESC
+WITH c.name AS categoryName,
+     collect({
+       id: toString(p.id),
+       name: p.name,
+       description: p.description,
+       partyName: party.name,
+       status: p.status,
+       updatedAt: toString(p.updatedAt)
+     }) AS policies
+RETURN categoryName, policies
+ORDER BY categoryName
+LIMIT 8
     `);
 
     const categories = result.records.map(record => ({

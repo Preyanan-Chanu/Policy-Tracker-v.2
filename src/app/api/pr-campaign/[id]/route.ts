@@ -1,8 +1,9 @@
+// src/app/api/pr-campaign/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
 import pg from "@/app/lib/postgres";
-import { ref, deleteObject, listAll, StorageReference } from "firebase/storage";
 import { storage } from "@/app/lib/firebase";
+import { ref, deleteObject, listAll } from "firebase/storage";
 
 // ✅ GET campaign by ID
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -42,7 +43,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       `,
       { id: idNumber }
     );
-    console.log("✅ จำนวน records ที่ได้จาก Neo4j:", neoResult.records.length);
 
     const neo = neoResult.records[0];
     if (!neo) return NextResponse.json({ error: "ไม่พบโครงการใน Neo4j" }, { status: 404 });
@@ -87,28 +87,23 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 }
 
 // ✅ DELETE campaign by ID
-export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const idNumber = parseInt(id);
   if (isNaN(idNumber)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
-  const idString = String(idNumber);
   const session = driver.session();
+  const idStr = String(idNumber);
 
   try {
-    // 🔥 ลบจาก Firebase Storage
-    // try {
-    //   const bannerRef = ref(storage, `campaign/banner/${idString}.jpg`);
-    //   await deleteObject(bannerRef);
-    // } catch { }
-
+    // 🔥 ลบไฟล์ Firebase (pdf + picture folder)
     try {
-      const pdfRef = ref(storage, `campaign/reference/${idString}.pdf`);
+      const pdfRef = ref(storage, `campaign/reference/${idStr}.pdf`);
       await deleteObject(pdfRef);
     } catch { }
 
     try {
-      const folderRef = ref(storage, `campaign/picture/${idString}`);
+      const folderRef = ref(storage, `campaign/picture/${idStr}`);
       const result = await listAll(folderRef);
       await Promise.all(result.items.map((item) => deleteObject(item)));
     } catch { }
@@ -132,7 +127,6 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
   }
 }
 
-
 // ✅ PUT update campaign by ID
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -143,87 +137,82 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     name,
     description,
     status,
-    policy,
     policyId,
     partyId,
     budget,
     expenses,
-    // banner,
     area,
     impact,
-    size
+    size,
   } = await req.json();
+
+  const progressMap: Record<string, number> = {
+    "เริ่มโครงการ": 20,
+    "วางแผน": 40,
+    "ตัดสินใจ": 60,
+    "ดำเนินการ": 80,
+    "ประเมินผล": 100,
+  };
+  const progress = progressMap[status] ?? 0;
+  const isSpecial = policyId === null;
 
   const session = driver.session();
 
   try {
-    const progressMap: Record<string, number> = {
-      "เริ่มโครงการ": 20,
-      "วางแผน": 40,
-      "ตัดสินใจ": 60,
-      "ดำเนินการ": 80,
-      "ประเมินผล": 100,
-    };
-    const progress = progressMap[status] ?? 0;
-
-    const isSpecial = policyId === null;
-
     if (isSpecial) {
-      // ✅ กรณีโครงการพิเศษ
-          await session.run(
-      `
-      MATCH (c:SpecialCampaign {id: $id})
-REMOVE c:Campaign
-SET c:SpecialCampaign
-WITH c
-OPTIONAL MATCH (c)-[r:PART_OF]->()
-DELETE r
-WITH c
-OPTIONAL MATCH (c)-[r2:CREATED_BY]->()
-DELETE r2
-WITH c
-MATCH (party:Party {id: toInteger($partyId)})
-MERGE (c)-[:CREATED_BY]->(party)
-SET c.name = $name,
-    c.description = $description,
-    c.status = $status,
-    c.progress = $progress,
-    c.area = $area,
-    c.impact = $impact,
-    c.size = $size
-
-      `,
-      { id: idNumber, name, description, status, progress, area, impact, size, partyId }
-    );
+      await session.run(
+        `
+       MATCH (c:SpecialCampaign {id: $id})
+  WITH c, labels(c) AS lbls
+  FOREACH (_ IN CASE WHEN 'Campaign' IN lbls THEN [1] ELSE [] END | REMOVE c:Campaign)
+  FOREACH (_ IN CASE WHEN 'SpecialCampaign' NOT IN lbls THEN [1] ELSE [] END | SET c:SpecialCampaign)
+  WITH c
+  OPTIONAL MATCH (c)-[r:PART_OF]->()
+  DELETE r
+  WITH c
+  OPTIONAL MATCH (c)-[r2:CREATED_BY]->()
+  DELETE r2
+  WITH c
+  MATCH (party:Party {id: toInteger($partyId)})
+  MERGE (c)-[:CREATED_BY]->(party)
+  SET c.name = $name,
+      c.description = $description,
+      c.status = $status,
+      c.progress = $progress,
+      c.area = $area,
+      c.impact = $impact,
+      c.size = $size
+  `,
+        { id: idNumber, name, description, status, progress, area, impact, size, partyId }
+      );
     } else {
-      // ✅ กรณีโครงการทั่วไป
-          await session.run(
-      `
-     MATCH (c:Campaign {id: $id})
-REMOVE c:SpecialCampaign
-SET c:Campaign
-WITH c
-OPTIONAL MATCH (c)-[r:PART_OF]->()
-DELETE r
-WITH c
-OPTIONAL MATCH (c)-[r2:CREATED_BY]->()
-DELETE r2
-WITH c
-MATCH (p:Policy {id: toInteger($policyId)})
-MATCH (party:Party {id: toInteger($partyId)})
-MERGE (c)-[:PART_OF]->(p)
-MERGE (c)-[:CREATED_BY]->(party)
-SET c.name = $name,
-    c.description = $description,
-    c.status = $status,
-    c.progress = $progress,
-    c.area = $area,
-    c.impact = $impact,
-    c.size = $size
-
-      `,
-      { id: idNumber, policyId, name, description, status, progress, area, impact, size, partyId }
-    );
+      await session.run(
+        `
+        MATCH (c:Campaign {id: $id})
+  WITH c, labels(c) AS lbls
+  FOREACH (_ IN CASE WHEN 'SpecialCampaign' IN lbls THEN [1] ELSE [] END | REMOVE c:SpecialCampaign)
+  FOREACH (_ IN CASE WHEN 'Campaign' NOT IN lbls THEN [1] ELSE [] END | SET c:Campaign)
+  WITH c
+  OPTIONAL MATCH (c)-[r:PART_OF]->()
+  DELETE r
+  WITH c
+  OPTIONAL MATCH (c)-[r2:CREATED_BY]->()
+  DELETE r2
+  WITH c
+  MATCH (p:Policy {id: toInteger($policyId)})
+  MATCH (party:Party {id: toInteger($partyId)})
+  MERGE (c)-[:PART_OF]->(p)
+  MERGE (c)-[:CREATED_BY]->(party)
+  SET c.name = $name,
+      c.description = $description,
+      c.status = $status,
+      c.progress = $progress,
+      c.area = $area,
+      c.impact = $impact,
+      c.size = $size
+  `,
+        { id: idNumber, policyId, name, description, status, progress, area, impact, size, partyId }
+      );
     }
 
     // ✅ UPDATE PostgreSQL
@@ -249,7 +238,7 @@ SET c.name = $name,
 
     return NextResponse.json({ message: "แก้ไขโครงการสำเร็จ" });
   } catch (err) {
-    console.error("❌ PUT error:", err);
+    console.error("PUT error:", err);
     return NextResponse.json({ error: "ไม่สามารถแก้ไขโครงการได้" }, { status: 500 });
   } finally {
     await session.close();

@@ -1,14 +1,21 @@
-// /src/app/api/home/progress/route.ts
+// src/app/api/home/progress/route.ts
 import { NextResponse } from "next/server";
 import driver from "@/app/lib/neo4j";
+
+interface PolicySummary {
+    id: number;
+    name: string;
+    status: string;
+    partyName: string;
+    partyId: number;
+    progress: number;
+}
 
 const sizeWeight: Record<string, number> = {
     "เล็ก": 1,
     "กลาง": 2,
     "ใหญ่": 3,
 };
-
-
 
 function weightedProjectProgress(projects: { progress: number; size: string }[]) {
     let totalWeight = 0;
@@ -41,17 +48,24 @@ export async function GET() {
       ORDER BY c.name
     `);
 
-        // จัดกลุ่มตาม category
         const categoryMap = new Map();
 
         for (const record of result.records) {
             const categoryName = record.get("categoryName");
             const policyName = record.get("policyName");
-            const policyId = record.get("policyId").toNumber();
+            const policyId = record.get("policyId")?.toNumber?.() ?? null;
             const status = record.get("status");
             const partyName = record.get("partyName");
             const partyId = record.get("partyId")?.toNumber?.() ?? null;
-            const projects = record.get("projects");
+            const projectsRaw = record.get("projects");
+
+            // กรอง project ที่ไม่มี progress หรือ size
+            const projects = projectsRaw.filter(
+                (p: any) =>
+                    typeof p.progress === "number" &&
+                    typeof p.size === "string" &&
+                    p.size in sizeWeight
+            );
 
             const policyProgress = weightedProjectProgress(projects);
 
@@ -69,9 +83,11 @@ export async function GET() {
             });
         }
 
-        // เตรียม output
         const categories = Array.from(categoryMap.entries()).map(
             ([categoryName, policies]) => {
+                // เรียงจาก progress มาก → น้อย
+                policies.sort((a: PolicySummary, b: PolicySummary) => b.progress - a.progress);
+
                 const totalProgress = policies.reduce(
                     (sum: number, p: { progress: number }) => sum + p.progress,
                     0

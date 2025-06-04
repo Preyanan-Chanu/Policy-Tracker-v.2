@@ -6,7 +6,7 @@ export async function GET(
   req: NextRequest,
   context: { params: { id: string } }
 ) {
-  const { id } = await context.params;
+   const { id } = await context.params;
   const idNumber = parseInt(id, 10);
 
   if (isNaN(idNumber)) {
@@ -46,7 +46,7 @@ export async function POST(
   req: NextRequest,
   context: { params: { id: string } }
 ) {
-  const { id } = await context.params;
+  const { id } = context.params;
   const idNumber = parseInt(id, 10);
 
   if (isNaN(idNumber)) {
@@ -54,18 +54,27 @@ export async function POST(
   }
 
   const { name, description, link } = await req.json();
+  if (!name || !description) {
+    return NextResponse.json({ error: "กรุณาระบุชื่อและคำอธิบาย" }, { status: 400 });
+  }
 
   const session = driver.session();
   try {
-    await session.run(
+    const result = await session.run(
       `
       MATCH (p:Party {id: $id})
       SET p.name = $name,
           p.description = $description,
           p.link = $link
+      RETURN COUNT(p) AS updated
       `,
       { id: idNumber, name, description, link }
     );
+
+    const updated = result.records[0]?.get("updated").toNumber?.() ?? 0;
+    if (updated === 0) {
+      return NextResponse.json({ error: "ไม่พบพรรคที่ต้องการอัปเดต" }, { status: 404 });
+    }
 
     return NextResponse.json({ message: "✅ บันทึกสำเร็จ" });
   } catch (error) {

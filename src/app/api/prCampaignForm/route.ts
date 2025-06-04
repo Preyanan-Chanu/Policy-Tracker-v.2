@@ -14,7 +14,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  
+
   const {
     name,
     description,
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     impact,
     size,
   } = await req.json();
-console.log("🎯 req.body =", { name, partyId, policyId });
+  console.log("🎯 req.body =", { name, partyId, policyId });
 
   const session = driver.session();
   const client = await pg.connect();
@@ -71,18 +71,20 @@ console.log("🎯 req.body =", { name, partyId, policyId });
       if (!campaignId) throw new Error("❌ สร้าง campaign พิเศษไม่สำเร็จ");
 
       await session.run(
-        `MATCH (party:Party {id: toInteger($partyId)})
-         CREATE (c:SpecialCampaign {
-           id: toInteger($id),
-           name: $name,
-           description: $description,
-           status: $status,
-           progress: $progress,
-           area: $area,
-           impact: $impact,
-           size: $size
-         })-[:CREATED_BY]->(party)`,
-        { id: campaignId, name, description, status, progress, /* banner,*/ area, impact, size, partyId }
+        `
+        MATCH (party:Party {id: toInteger($partyId)})
+  CREATE (c:SpecialCampaign {
+    id: toInteger($id),
+    name: $name,
+    description: $description,
+    status: $status,
+    progress: $progress,
+    area: $area,
+    impact: $impact,
+    size: $size
+  })-[:CREATED_BY]->(party)
+  `,
+        { id: campaignId, name, description, status, progress, area, impact, size, partyId }
       );
 
       if (Array.isArray(expenses)) {
@@ -150,18 +152,24 @@ console.log("🎯 req.body =", { name, partyId, policyId });
     return new NextResponse(JSON.stringify({ message: "สร้างโครงการสำเร็จ", id: campaignId }), { status: 200 });
   } catch (err) {
     console.error("❌ Neo4j/PG Error:", err);
-    await client.query("ROLLBACK");
-    client.release();
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("⚠️ Rollback failed:", rollbackErr);
+    }
     return new NextResponse(JSON.stringify({ error: "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์" }), { status: 500 });
-  } finally {
+  }
+  finally {
+    client.release?.();
     await session.close();
   }
+
 }
 
 
 export async function GET(req: NextRequest) {
   const partyId = req.nextUrl.searchParams.get("party_id");
-    console.log("📥 partyId ที่รับ:", partyId);
+  console.log("📥 partyId ที่รับ:", partyId);
 
   if (!partyId) {
     return NextResponse.json([]);
@@ -171,7 +179,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await session.run(
-       `
+      `
       MATCH (party:Party)
       WHERE party.id = toInteger($partyId)
       MATCH (p:Policy)-[:BELONGS_TO]->(party)
@@ -187,9 +195,9 @@ export async function GET(req: NextRequest) {
       id: r.get("id")?.toNumber?.() ?? null,
       name: r.get("name"),
     }));
-
-    return NextResponse.json(policies);
     console.log("✅ partyId ที่รับจาก query:", partyId);
+    return NextResponse.json(policies);
+
 
   } catch (err) {
     console.error("Error fetching policies:", err);

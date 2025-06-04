@@ -20,7 +20,6 @@ export default function EditMemberForm() {
   const [partyName, setPartyName] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [prefix, setPrefix] = useState("");
 const [partyId, setPartyId] = useState<string | null>(null);
 
 useEffect(() => {
@@ -45,7 +44,6 @@ useEffect(() => {
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data();
-        setPrefix(data.Prefix || "");
         setFirstName(data.FirstName || "");
         setLastName(data.LastName || "");
         setRole(data.Role || "");
@@ -90,7 +88,6 @@ useEffect(() => {
 
   const docRef = doc(firestore, "Party", partyId, "Member", memberId);
   await updateDoc(docRef, {
-    Prefix: prefix,
     FirstName: firstName,
     LastName: lastName,
     Role: role,
@@ -115,15 +112,6 @@ useEffect(() => {
     <div className="flex-1 md:ml-64 p-8">
       <h1 className="text-3xl text-white mb-6">แก้ไขข้อมูลสมาชิก</h1>
       <form onSubmit={handleSubmit} className="bg-white p-6 rounded-md shadow-lg max-w-md mx-auto">
-
-        {/* ✅ คำนำหน้า */}
-        <input
-          type="text"
-          value={prefix}
-          onChange={(e) => setPrefix(e.target.value)}
-          placeholder="คำนำหน้า เช่น ทพญ., ศ.ดร., นายแพทย์"
-          className="w-full border p-2 rounded mb-4"
-        />
 
         <input
           type="text"

@@ -40,7 +40,7 @@ const decodedId = parseInt(decodeURIComponent(id), 10);
 
     const record = result.records[0];
     const data = {
-      id: record.get("id")?.toNumber?.() ?? null,
+      id: record.get("id")?.toNumber?.() ?? record.get("id"),
       name: record.get("name"),
       description: record.get("description"),
       date: record.get("date"),

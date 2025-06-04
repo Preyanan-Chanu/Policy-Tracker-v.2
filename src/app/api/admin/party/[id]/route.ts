@@ -21,7 +21,7 @@ export async function GET(
        RETURN p.id AS id, p.name AS name, p.description AS description, p.link AS link`,
       { id: neo4j.int(id) }
     );
-    await session.close();
+    
 
     if (result.records.length === 0) {
       return NextResponse.json({ error: "ไม่พบพรรค" }, { status: 404 });
@@ -37,6 +37,8 @@ export async function GET(
   } catch (err: any) {
     console.error("❌ /api/admin/party/[id] GET error:", err);
     return NextResponse.json({ error: (err as any).message ?? "อัปเดตไม่สำเร็จ" }, { status: 500 });
+  } finally {
+    await session.close();
   }
 }
 

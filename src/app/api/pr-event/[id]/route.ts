@@ -155,18 +155,6 @@ if (province) {
   );
 }
 
-
-    if (province) {
-      await session.run(
-        `
-        MATCH (e:Event {id: toInteger($id)})
-        MERGE (prov:Province {name: $province})
-        MERGE (e)-[:LOCATED_IN]->(prov)
-        `,
-        { id: idNumber, province }
-      );
-    }
-
     return NextResponse.json({ message: "แก้ไขกิจกรรมสำเร็จ" });
   } catch (err) {
     console.error("PUT error:", err);

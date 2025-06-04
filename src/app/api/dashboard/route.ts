@@ -4,7 +4,10 @@ import driver from "@/app/lib/neo4j";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const partyId = url.searchParams.get("partyId") || "all";
+  const rawPartyId = url.searchParams.get("partyId");
+const partyId = rawPartyId && rawPartyId !== "all" && !isNaN(Number(rawPartyId))
+  ? Number(rawPartyId)
+  : "all";
 
   const session = driver.session();
 

@@ -22,12 +22,16 @@ export async function POST(req: NextRequest) {
     );
 
     const neo4jPolicies = result.records
-      .map((record) => ({
-        id: record.get("id")?.toNumber?.() ?? null,
-        policy_name: record.get("policy_name"),
-        policy_description: record.get("policy_description") || "-",
-        policy_category: record.get("policy_category") || "-",
-      }))
+      .map((record) => {
+        const rawId = record.get("id");
+        const id = typeof rawId?.toNumber === "function" ? rawId.toNumber() : null;
+        return {
+          id,
+          policy_name: record.get("policy_name"),
+          policy_description: record.get("policy_description") || "-",
+          policy_category: record.get("policy_category") || "-",
+        };
+      })
       .filter((p) => p.id !== null);
 
     const ids = neo4jPolicies.map((p) => p.id);
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
     let pgPolicies: Record<number, any> = {};
     if (ids.length > 0) {
       const pgResult = await pg.query(
-        `SELECT id, total_budget, created_at, party_id FROM policies WHERE id = ANY($1::int[])`,
+        `SELECT id, total_budget, created_at, party_id FROM policies WHERE id = ANY($1::int[]) ORDER BY created_at DESC`,
         [ids]
       );
 
@@ -55,21 +59,11 @@ export async function POST(req: NextRequest) {
       party_id: pgPolicies[p.id]?.party_id ?? null,
     }));
 
-    const sorted = combined.sort((a, b) => {
-      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return bTime - aTime;
-    });
-
-    return NextResponse.json(sorted);
+    return NextResponse.json(combined);
   } catch (error) {
     console.error("❌ Error fetching policies:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   } finally {
     await session.close();
   }
-}
-
-export async function GET() {
-  return NextResponse.json({ message: "This API expects a POST request." });
 }

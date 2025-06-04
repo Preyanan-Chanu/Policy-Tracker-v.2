@@ -48,6 +48,7 @@ export async function GET(
         p.progress AS progress,
         p.status AS status,
         party.name AS partyName,
+        party.id AS partyId,
         c.name AS categoryName
       ORDER BY p.id
       `,
@@ -57,7 +58,7 @@ export async function GET(
     const neoPolicies = result.records.map((r, idx) => {
       const rawId = r.get("policyId");
       let policyId: number;
-      
+
       // ปรับปรุงการจัดการ policyId ให้ consistent และ robust
       if (typeof rawId?.toNumber === "function") {
         policyId = rawId.toNumber();
@@ -79,7 +80,7 @@ export async function GET(
 
       const rawProgress = r.get("progress");
       let progress = 0;
-      
+
       if (typeof rawProgress?.toNumber === "function") {
         progress = rawProgress.toNumber();
       } else if (typeof rawProgress === "number") {
@@ -95,6 +96,12 @@ export async function GET(
         status: r.get("status") ?? "-",
         progress: Math.max(0, Math.min(100, progress)), // จำกัดค่าระหว่าง 0-100
         partyName: r.get("partyName") ?? "ไม่ระบุพรรค",
+        partyId: (() => {
+          const raw = r.get("partyId");
+          if (typeof raw?.toNumber === "function") return raw.toNumber();
+          if (typeof raw === "object" && raw?.low !== undefined) return raw.low;
+          return Number(raw) || 0;
+        })(),
         categoryName: r.get("categoryName") ?? categoryName, // ใช้ categoryName ที่ส่งมาแทน
       };
     });
@@ -113,7 +120,7 @@ export async function GET(
           `SELECT id, total_budget FROM policies WHERE id = ANY($1::int[])`,
           [validPolicyIds]
         );
-        
+
         budgetMap = budgetRes.rows.reduce((acc, row) => {
           const budget = Number(row.total_budget);
           acc[row.id] = isNaN(budget) ? 0 : budget;
@@ -134,9 +141,9 @@ export async function GET(
     return NextResponse.json(policies);
   } catch (err) {
     console.error("❌ Error in /api/policycategory/[name]:", err);
-    return NextResponse.json({ 
-      error: "Internal server error", 
-      message: err instanceof Error ? err.message : "Unknown error" 
+    return NextResponse.json({
+      error: "Internal server error",
+      message: err instanceof Error ? err.message : "Unknown error"
     }, { status: 500 });
   } finally {
     await session.close();

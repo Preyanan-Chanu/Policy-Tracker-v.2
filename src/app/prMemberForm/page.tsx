@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL, } from "firebase/storage";
-import { doc, setDoc, getDocs, collection} from "firebase/firestore";
+import { doc, setDoc, getDocs, collection } from "firebase/firestore";
 import { storage, firestore } from "@/app/lib/firebase";
 import PRSidebar from "../components/PRSidebar";
 
@@ -15,23 +15,22 @@ export default function PRMemberForm() {
   const [memberPic, setMemberPic] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [partyName, setPartyName] = useState("ไม่ทราบชื่อพรรค");
-  const [memberPrefix, setMemberPrefix] = useState("");
   const [partyId, setPartyId] = useState<string | null>(null);
 
 
   const router = useRouter();
 
   useEffect(() => {
-  const name = localStorage.getItem("partyName");
-  const id = localStorage.getItem("partyId");
-  if (name && id) {
-    setPartyName(name);
-    setPartyId(id);
-  } else {
-    alert("กรุณาเข้าสู่ระบบใหม่");
-    router.push("/login");
-  }
-}, []);
+    const name = localStorage.getItem("partyName");
+    const id = localStorage.getItem("partyId");
+    if (name && id) {
+      setPartyName(name);
+      setPartyId(id);
+    } else {
+      alert("กรุณาเข้าสู่ระบบใหม่");
+      router.push("/login");
+    }
+  }, []);
 
   useEffect(() => {
     const party = localStorage.getItem("partyName");
@@ -52,51 +51,96 @@ export default function PRMemberForm() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!memberName || !memberSurname || !memberRole || !memberPic) {
-    alert("กรุณากรอกข้อมูลให้ครบ");
-    return;
-  }
+    e.preventDefault();
+    if (!memberName || !memberSurname || !memberRole || !memberPic) {
+      alert("กรุณากรอกข้อมูลให้ครบ");
+      return;
+    }
 
-  const fileExt = memberPic.name.split(".").pop()?.toLowerCase() === "png" ? "png" : "jpg";
-  const fullName = `${memberPrefix}_${memberName}_${memberSurname}`.replace(/\s+/g, "_");
-  const firestorePath = `Party/${partyId}/Member`;
+    const fileExt = memberPic.name.split(".").pop()?.toLowerCase() === "png" ? "png" : "jpg";
+    const fullName = `${memberName}_${memberSurname}`.replace(/\s+/g, "_");
+    const firestorePath = `Party/${partyId}/Member`;
 
-  try {
-    // ✅ ดึง collection และคำนวณ id ใหม่
-    const memberCollection = collection(firestore, firestorePath);
-    const snapshot = await getDocs(memberCollection);
+    try {
+      
+      const memberCollection = collection(firestore, firestorePath);
+      const snapshot = await getDocs(memberCollection);
 
-    const validIds = snapshot.docs
-  .map(doc => doc.data().id)
-  .filter(id => typeof id === "number" && !isNaN(id));
+      const validIds = snapshot.docs
+        .map(doc => doc.data().id)
+        .filter(id => typeof id === "number" && !isNaN(id));
 
-    const maxId = Math.max(...snapshot.docs.map(doc => doc.data().id || 0), 0);
-    const newId = maxId + 1;
+      const maxId = Math.max(...snapshot.docs.map(doc => doc.data().id || 0), 0);
+      const newId = maxId + 1;
 
-    // ✅ Upload Image ด้วยชื่อ id
-    const imageRef = ref(storage, `party/member/${partyId}/${newId}.${fileExt}`);
-    await uploadBytes(imageRef, memberPic);
-    const imageUrl = await getDownloadURL(imageRef);
+      const resizedBlob = await resizeImage(memberPic);
 
-    // ✅ บันทึกข้อมูล Firestore โดยใช้ fullName เป็น documentId
-    const docRef = doc(firestore, firestorePath, String(newId));
-    await setDoc(docRef, {
-  Prefix: memberPrefix,
-  FirstName: memberName,
-  LastName: memberSurname,
-  Role: memberRole,
-  Picture: `/member/${newId}.${fileExt}`, // หรือเก็บเป็น URL จริงก็ได้
-  id: newId,
-});
+      
+      const imageRef = ref(storage, `party/member/${partyId}/${newId}.${fileExt}`);
+      await uploadBytes(imageRef, resizedBlob);
+      const imageUrl = await getDownloadURL(imageRef);
 
-    alert("✅ บันทึกข้อมูลสมาชิกสำเร็จ");
-    router.push("/prPartyInfo");
-  } catch (err) {
-    console.error("❌ Error saving member:", err);
-    alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
-  }
-};
+      
+      const docRef = doc(firestore, firestorePath, String(newId));
+      await setDoc(docRef, {
+        FirstName: memberName,
+        LastName: memberSurname,
+        Role: memberRole,
+        Picture: `/member/${newId}.${fileExt}`, // หรือเก็บเป็น URL จริงก็ได้
+        id: newId,
+      });
+
+      alert("✅ บันทึกข้อมูลสมาชิกสำเร็จ");
+      router.push("/prPartyInfo");
+    } catch (err) {
+      console.error("❌ Error saving member:", err);
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    }
+  };
+
+  const resizeImage = (file: File, maxWidth = 500, maxHeight = 500): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        // คำนวณสัดส่วนใหม่
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          } else {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject("Failed to get canvas context");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject("Failed to resize image");
+        }, "image/jpeg", 0.8); // ใช้ jpeg และลด quality เพื่อขนาดเล็กลง
+      };
+
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
 
 
   return (
@@ -110,22 +154,11 @@ export default function PRMemberForm() {
         <main className="p-6">
           <h2 className="text-3xl text-white text-center mb-6">เพิ่มข้อมูลสมาชิก</h2>
 
-          
+
 
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl mx-auto">
             <form onSubmit={handleSubmit} className="space-y-4">
 
-              <div>
-  <label className="block font-bold">คำนำหน้า / ยศ:</label>
-  <input
-    type="text"
-    placeholder="เช่น ทพญ., นายแพทย์, ศ.ดร."
-    value={memberPrefix}
-    onChange={(e) => setMemberPrefix(e.target.value)}
-    className="w-full p-2 border rounded-md"
-    
-  />
-</div>
               <div>
                 <label className="block font-bold">ชื่อ:</label>
                 <input
@@ -181,6 +214,7 @@ export default function PRMemberForm() {
                 บันทึก
               </button>
             </form>
+            
           </div>
         </main>
       </div>
