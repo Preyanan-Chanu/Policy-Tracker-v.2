@@ -1,3 +1,4 @@
+//src\app\policycategory\page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -139,6 +140,7 @@ const PolicyPage = () => {
           }
 
           const data = await res.json();
+          console.log("👉 Like state", p.policyId, data);
           const count = Number(data.like) || 0;
           const liked = Boolean(data.isLiked);
 
