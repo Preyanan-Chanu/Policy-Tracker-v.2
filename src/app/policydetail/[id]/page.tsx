@@ -16,9 +16,16 @@ import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import Image from "next/image";
 import dynamic from "next/dynamic";
 
-// Lazy load components
+
+// Lazy load Gallery with better loading state
 const LazyGallery = dynamic(() => import("@/app/components/LazyGallery"), {
-  loading: () => <div className="h-32 bg-gray-100 animate-pulse rounded-lg"></div>,
+  loading: () => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="aspect-square bg-gray-200 animate-pulse rounded-lg" />
+      ))}
+    </div>
+  ),
   ssr: false
 });
 
@@ -34,6 +41,7 @@ interface AchievementItem {
 }
 
 interface Party {
+  id: string;
   name: string;
   description: string;
   link?: string | null;
@@ -53,12 +61,23 @@ interface LikeState {
   lastLikedAt?: number;
 }
 
+interface GalleryImage {
+  url: string;
+  loaded: boolean;
+  error: boolean;
+}
+
+const LIKE_COOLDOWN = 2000; // 2 seconds
+const GALLERY_BATCH_SIZE = 6;
+const INTERSECTION_THRESHOLD = 0.1;
+
 const PolicyDetailPage = () => {
   const router = useRouter();
   const params = useParams();
   const policyId = decodeURIComponent(params.id as string);
+    const [pdfUrl, setPdfUrl] = useState<string>("");
 
-  // Enhanced Like State with security measures
+  // Enhanced Like State with better security
   const [likeState, setLikeState] = useState<LikeState>({
     count: 0,
     isLiked: false,
@@ -82,16 +101,23 @@ const PolicyDetailPage = () => {
   const [relatedProjects, setRelatedProjects] = useState<RelatedProject[]>([]);
   const [party, setParty] = useState<Party | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string>("");
-  const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+
+  // Optimized Gallery states
+  const [galleryImages, setGalleryImages] = useState<GalleryImage[]>([]);
+  const [visibleGalleryCount, setVisibleGalleryCount] = useState(GALLERY_BATCH_SIZE);
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
+  const [galleryLoading, setGalleryLoading] = useState(false);
 
   // Performance states
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [fingerprintCache, setFingerprintCache] = useState<string | null>(null);
+  const [likeAttempts, setLikeAttempts] = useState<number[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const galleryObserverRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Memoized step map for better performance
+  // Memoized step map
   const stepMap = useMemo(() => ({
     "เริ่มนโยบาย": { label: "เริ่มนโยบาย", color: "#DF4F4D", step: 1 },
     "วางแผน": { label: "วางแผน", color: "#F29345", step: 2 },
@@ -100,65 +126,111 @@ const PolicyDetailPage = () => {
     "ประเมินผล": { label: "ประเมินผล", color: "#33828D", step: 5 },
   } as const), []);
 
-  // Enhanced security: Get fingerprint with caching and rate limiting
+  // Enhanced fingerprint with better caching
   const getFingerprint = useCallback(async (): Promise<string> => {
     if (fingerprintCache) return fingerprintCache;
+
+    // Check session storage first
+    const sessionFingerprint = sessionStorage.getItem('userFingerprint');
+    if (sessionFingerprint) {
+      setFingerprintCache(sessionFingerprint);
+      return sessionFingerprint;
+    }
 
     try {
       const fp = await FingerprintJS.load();
       const result = await fp.get();
       const fingerprint = result.visitorId;
-      setFingerprintCache(fingerprint);
 
-      // Store in sessionStorage for this session
+      setFingerprintCache(fingerprint);
       sessionStorage.setItem('userFingerprint', fingerprint);
       return fingerprint;
     } catch (error) {
       console.error('Failed to get fingerprint:', error);
-      // Fallback: use a combination of user agent, screen resolution, timezone
       const fallback = btoa(
         `${navigator.userAgent}-${screen.width}x${screen.height}-${Intl.DateTimeFormat().resolvedOptions().timeZone}`
       ).substring(0, 32);
       setFingerprintCache(fallback);
+      sessionStorage.setItem('userFingerprint', fallback);
       return fallback;
     }
   }, [fingerprintCache]);
 
-  // Check if user has already liked (with local storage backup)
-  const checkUserLikeStatus = useCallback(async () => {
-    try {
-      const fingerprint = await getFingerprint();
-      const localLikeKey = `policy_like_${policyId}_${fingerprint}`;
-      const hasLikedLocally = localStorage.getItem(localLikeKey) === 'true';
+  // Rate limiting check
+  const checkRateLimit = useCallback((timestamp: number): boolean => {
+    const now = Date.now();
+    const recentAttempts = likeAttempts.filter(time => now - time < 10000); // 10 seconds window
 
-      if (hasLikedLocally) {
-        setLikeState(prev => ({ ...prev, hasUserLiked: true, isLiked: true }));
-        return true;
-      }
-
-      // Check server-side
-      const res = await fetch(`/api/policylike/check?id=${policyId}&fingerprint=${fingerprint}`);
-      if (res.ok) {
-        const data = await res.json();
-        const hasLiked = data.hasLiked;
-        setLikeState(prev => ({ ...prev, hasUserLiked: hasLiked, isLiked: hasLiked }));
-
-        if (hasLiked) {
-          localStorage.setItem(localLikeKey, 'true');
-        }
-        return hasLiked;
-      }
-    } catch (error) {
-      console.error('Error checking like status:', error);
+    if (recentAttempts.length >= 3) {
+      return false;
     }
-    return false;
-  }, [policyId, getFingerprint]);
 
-  // Enhanced like handler with security measures
+    setLikeAttempts(prev => [...prev.slice(-2), timestamp]);
+    return true;
+  }, [likeAttempts]);
+
+  // Enhanced like status check with better caching
+  const checkUserLikeStatus = useCallback(async () => {
+  if (!policyId) {
+    console.warn("⚠️ policyId is undefined, skipping like check.");
+    return;
+  }
+
+  try {
+    const fingerprint = await getFingerprint();
+    const localKey = `policy_like_${policyId}_${fingerprint}`;
+
+    const res = await fetch(`/api/policylike?id=${policyId}&fingerprint=${fingerprint}`);
+    const data = await res.json().catch(() => ({}));
+
+    console.log("📥 Like status response:", res.status, data);
+
+    if (!res.ok) throw new Error("Fetch failed");
+
+    const hasLiked = Boolean(data.isLiked);
+    const likeCount = Number(data.like) || 0;
+
+    // ✅ update state
+    setLikeState(prev => ({
+      ...prev,
+      hasUserLiked: hasLiked,
+      isLiked: hasLiked,
+      count: likeCount
+    }));
+
+    // ✅ update localStorage หลังจากรู้ผลจริง
+    if (hasLiked) {
+      localStorage.setItem(localKey, 'true');
+    } else {
+      localStorage.removeItem(localKey);
+    }
+
+  } catch (err) {
+    console.error("❌ checkUserLikeStatus error:", err);
+  }
+}, [policyId, getFingerprint]);
+
+
+
+
+  // Enhanced like handler with better security
   const handleLike = useCallback(async () => {
   const now = Date.now();
+
+  // ป้องกันการกดซ้ำเร็วเกิน
   const lastLiked = likeState.lastLikedAt || 0;
-  if (now - lastLiked < 2000 || likeState.isLoading) return;
+  if (now - lastLiked < LIKE_COOLDOWN) {
+    alert(`กรุณารอ ${Math.ceil((LIKE_COOLDOWN - (now - lastLiked)) / 1000)} วินาที`);
+    return;
+  }
+
+  // Rate limit (ใน client)
+  if (!checkRateLimit(now)) {
+    alert("คุณกดไลค์บ่อยเกินไป กรุณารอสักครู่");
+    return;
+  }
+
+  if (likeState.isLoading) return;
 
   setLikeState(prev => ({ ...prev, isLoading: true }));
 
@@ -178,19 +250,21 @@ const PolicyDetailPage = () => {
     });
 
     if (!res.ok) {
-      const msg =
-        res.status === 429
-          ? "กรุณารอสักครู่ก่อนกดใหม่"
-          : res.status === 403
-            ? "ไม่สามารถดำเนินการได้ในขณะนี้"
-            : `เกิดข้อผิดพลาด (${res.status})`;
+      const errorData = await res.json().catch(() => ({}));
+      const msg = res.status === 429
+        ? "กรุณารอสักครู่ก่อนกดใหม่"
+        : res.status === 403
+          ? errorData.error || "ไม่สามารถดำเนินการได้ในขณะนี้"
+          : `เกิดข้อผิดพลาด (${res.status})`;
       throw new Error(msg);
     }
 
     const data = await res.json();
     const newCount = typeof data.like === "number" ? data.like : Number(data.like) || 0;
-    const newLikedState = !likeState.isLiked;
+    const newLikedState = data.action === 'liked'; // ✅ เช็คจากฝั่ง server โดยตรง
+    const localLikeKey = `policy_like_${policyId}_${fingerprint}`;
 
+    // อัปเดตสถานะไลค์
     setLikeState(prev => ({
       ...prev,
       count: newCount,
@@ -200,20 +274,31 @@ const PolicyDetailPage = () => {
       isLoading: false
     }));
 
-    const localLikeKey = `policy_like_${policyId}_${fingerprint}`;
+    // อัปเดต localStorage ให้ตรงกับสถานะจริง
     if (newLikedState) {
       localStorage.setItem(localLikeKey, 'true');
     } else {
       localStorage.removeItem(localLikeKey);
     }
 
-    if ('vibrate' in navigator) navigator.vibrate(50);
+    // Haptic feedback
+    if ('vibrate' in navigator) {
+      navigator.vibrate(newLikedState ? [50, 30, 50] : [30]);
+    }
+
+    // Visual feedback (bounce)
+    const button = document.querySelector('[data-like-button]');
+    if (button) {
+      button.classList.add('animate-bounce');
+      setTimeout(() => button.classList.remove('animate-bounce'), 500);
+    }
+
   } catch (error) {
-    console.error("Like error:", error);
+    console.error("❌ Like error:", error);
     setLikeState(prev => ({ ...prev, isLoading: false }));
     alert(error instanceof Error ? error.message : "เกิดข้อผิดพลาด กรุณาลองใหม่");
   }
-}, [policyId, likeState.isLiked, likeState.isLoading, likeState.lastLikedAt, getFingerprint]);
+}, [policyId, likeState.isLoading, likeState.lastLikedAt, getFingerprint, checkRateLimit]);
 
 
   // Optimized scroll handlers
@@ -225,12 +310,12 @@ const PolicyDetailPage = () => {
     scrollRef.current?.scrollBy({ left: 300, behavior: "smooth" });
   }, []);
 
-  // Wheel scroll handler with throttling
+  // Optimized wheel scroll handler
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
 
-    let throttleTimer: NodeJS.Timeout | null = null;
+    let throttleTimer: number | null = null;
 
     const onWheel = (e: WheelEvent) => {
       if (throttleTimer) return;
@@ -239,9 +324,9 @@ const PolicyDetailPage = () => {
         e.preventDefault();
         container.scrollLeft += e.deltaY;
 
-        throttleTimer = setTimeout(() => {
+        throttleTimer = window.setTimeout(() => {
           throttleTimer = null;
-        }, 16); // ~60fps
+        }, 16);
       }
     };
 
@@ -253,7 +338,79 @@ const PolicyDetailPage = () => {
     };
   }, []);
 
-  // Optimized data fetching with parallel requests
+  // Optimized gallery loading with intersection observer
+  const loadGalleryImages = useCallback(async () => {
+    if (galleryLoading) return;
+
+    setGalleryLoading(true);
+    try {
+      const folderRef = ref(storage, `policy/picture/${policyId}`);
+      const result = await listAll(folderRef);
+
+      const imagePromises = result.items.map(async (item) => {
+        try {
+          const url = await getDownloadURL(item);
+          return { url, loaded: false, error: false };
+        } catch (error) {
+          console.error(`Failed to load image ${item.name}:`, error);
+          return null;
+        }
+      });
+
+      const images = (await Promise.all(imagePromises)).filter(Boolean) as GalleryImage[];
+      setGalleryImages(images);
+    } catch (error) {
+      console.error("Gallery load error:", error);
+    } finally {
+      setGalleryLoading(false);
+    }
+  }, [policyId, galleryLoading]);
+
+  // Load more gallery images
+  const loadMoreGalleryImages = useCallback(() => {
+    setVisibleGalleryCount(prev => Math.min(prev + GALLERY_BATCH_SIZE, galleryImages.length));
+  }, [galleryImages.length]);
+
+  // Intersection observer for lazy loading more gallery images
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && visibleGalleryCount < galleryImages.length) {
+          loadMoreGalleryImages();
+        }
+      },
+      { threshold: INTERSECTION_THRESHOLD }
+    );
+
+    observer.observe(loadMoreRef.current);
+    galleryObserverRef.current = observer;
+
+    return () => {
+      if (galleryObserverRef.current) {
+        galleryObserverRef.current.disconnect();
+      }
+    };
+  }, [visibleGalleryCount, galleryImages.length, loadMoreGalleryImages]);
+
+   useEffect(() => {
+   const loadPdfUrl = async () => {
+     try {
+       const pdfRef = ref(storage, `policy/reference/${policyId}.pdf`);
+       const url = await getDownloadURL(pdfRef);
+       setPdfUrl(url);
+     } catch (err) {
+      console.warn("ไม่พบ PDF สำหรับโครงการนี้");
+       setPdfUrl("");
+     }
+   };
+
+   // ตรวจเช็กแค่ policyId ว่ามีค่า ก็โหลดได้เลย
+   if (policyId) loadPdfUrl();
+ }, [policyId]);
+
+  // Main data fetching with better error handling and performance
   useEffect(() => {
     if (!policyId) return;
 
@@ -261,37 +418,48 @@ const PolicyDetailPage = () => {
       setIsInitialLoading(true);
 
       try {
-        // Parallel fetch for better performance
-        const [neo4jRes, likeRes] = await Promise.all([
-          fetch(`/api/policydetail/${encodeURIComponent(policyId)}`),
-          fetch(`/api/policylike?id=${policyId}`)
-        ]);
+        // Initialize fingerprint cache from session storage
+        const cachedFingerprint = sessionStorage.getItem('userFingerprint');
+        if (cachedFingerprint) {
+          setFingerprintCache(cachedFingerprint);
+        }
 
-        // Process Neo4j data
-        if (neo4jRes.ok) {
+        // Parallel fetch for better performance
+        const fetchPromises = [
+          fetch(`/api/policydetail/${encodeURIComponent(policyId)}`).catch(e => ({ ok: false, error: e })),
+          fetch(`/api/policylike?id=${policyId}`).catch(e => ({ ok: false, error: e })),
+          fetch(`/api/banner/${policyId}`).catch(e => ({ ok: false, error: e }))
+        ];
+
+        const [neo4jRes, likeRes, bannerRes] = await Promise.all(fetchPromises);
+
+        if (neo4jRes instanceof Response && neo4jRes.ok) {
           const data = await neo4jRes.json();
-          setPolicyName(data.name || name);
+          if (!policyName) setPolicyName(data.name);
           setDescription(data.description || "");
           setStatus(data.status || null);
           setRelatedProjects(data.relatedProjects || []);
           setParty(data.party || null);
         }
 
-        // Process like data
-        if (likeRes.ok) {
+        if (likeRes instanceof Response && likeRes.ok) {
           const likeData = await likeRes.json();
           const count = typeof likeData.like === "number" ? likeData.like : Number(likeData.like) || 0;
-          setLikeState(prev => ({ ...prev, count }));
+
         }
 
-        // Fetch banner (non-blocking)
-        fetch(`/api/banner/${policyId}`)
-          .then(res => res.ok ? res.text() : Promise.reject())
-          .then(setBannerUrl)
-          .catch(() => console.warn("Banner not found"));
+        if (bannerRes instanceof Response && bannerRes.ok) {
+          const bannerUrl = await bannerRes.text();
+          setBannerUrl(bannerUrl);
+        }
+
+
 
         // Check user like status
         await checkUserLikeStatus();
+
+        // Load gallery images after a delay to improve initial load
+        setTimeout(loadGalleryImages, 500);
 
       } catch (error) {
         console.error("Data fetch error:", error);
@@ -299,17 +467,11 @@ const PolicyDetailPage = () => {
         setIsInitialLoading(false);
       }
     };
-
-    // Initialize fingerprint cache from session storage
-    const cachedFingerprint = sessionStorage.getItem('userFingerprint');
-    if (cachedFingerprint) {
-      setFingerprintCache(cachedFingerprint);
-    }
-
+    console.log("🔄 useEffect triggered");
     fetchAllData();
-  }, [policyId, name, checkUserLikeStatus]);
+  }, [policyId]);
 
-  // Separate effect for Firebase timeline (real-time)
+  // Firebase timeline listener (real-time)
   useEffect(() => {
     if (!policyId) return;
 
@@ -318,24 +480,19 @@ const PolicyDetailPage = () => {
       const items: TimelineItem[] = snapshot.docs.map((doc) => doc.data() as TimelineItem);
 
       const sorted = items.sort((a, b) => {
-        const dateA = new Date(a.date.replace(/(\d+)\s([^\d]+)\s(\d+)/, (_, d, m, y) => {
+        const convertThaiDate = (dateStr: string) => {
           const thMonths: Record<string, string> = {
             "ม.ค.": "Jan", "ก.พ.": "Feb", "มี.ค.": "Mar", "เม.ย.": "Apr",
             "พ.ค.": "May", "มิ.ย.": "Jun", "ก.ค.": "Jul", "ส.ค.": "Aug",
             "ก.ย.": "Sep", "ต.ค.": "Oct", "พ.ย.": "Nov", "ธ.ค.": "Dec",
           };
-          return `${d} ${thMonths[m] || m} ${parseInt(y) - 543}`;
-        }));
+          return dateStr.replace(/(\d+)\s([^\d]+)\s(\d+)/, (_, d, m, y) => {
+            return `${d} ${thMonths[m] || m} ${parseInt(y) - 543}`;
+          });
+        };
 
-        const dateB = new Date(b.date.replace(/(\d+)\s([^\d]+)\s(\d+)/, (_, d, m, y) => {
-          const thMonths: Record<string, string> = {
-            "ม.ค.": "Jan", "ก.พ.": "Feb", "มี.ค.": "Mar", "เม.ย.": "Apr",
-            "พ.ค.": "May", "มิ.ย.": "Jun", "ก.ค.": "Jul", "ส.ค.": "Aug",
-            "ก.ย.": "Sep", "ต.ค.": "Oct", "พ.ย.": "Nov", "ธ.ค.": "Dec",
-          };
-          return `${d} ${thMonths[m] || m} ${parseInt(y) - 543}`;
-        }));
-
+        const dateA = new Date(convertThaiDate(a.date));
+        const dateB = new Date(convertThaiDate(b.date));
         return dateB.getTime() - dateA.getTime();
       });
 
@@ -345,7 +502,7 @@ const PolicyDetailPage = () => {
     return unsubscribe;
   }, [policyId]);
 
-  // Separate effect for achievements
+  // Achievements fetching
   useEffect(() => {
     if (!policyId) return;
 
@@ -370,25 +527,39 @@ const PolicyDetailPage = () => {
     fetchAchievements();
   }, [policyId]);
 
-  // Lazy load gallery images
-  useEffect(() => {
-    if (!policyId) return;
+  // Optimized image component with error handling
+  const OptimizedImage = useCallback(({ src, alt, className, onClick }: {
+    src: string;
+    alt: string;
+    className?: string;
+    onClick?: () => void;
+  }) => {
+    const [loaded, setLoaded] = useState(false);
+    const [error, setError] = useState(false);
 
-    const loadGallery = async () => {
-      try {
-        const folderRef = ref(storage, `policy/picture/${policyId}`);
-        const result = await listAll(folderRef);
-        const urls = await Promise.all(result.items.map(item => getDownloadURL(item)));
-        setGalleryUrls(urls);
-      } catch (error) {
-        console.error("Gallery load error:", error);
-      }
-    };
-
-    // Delay gallery loading to improve initial page load
-    const timer = setTimeout(loadGallery, 1000);
-    return () => clearTimeout(timer);
-  }, [policyId]);
+    return (
+      <div className={`relative overflow-hidden ${className}`}>
+        {!loaded && !error && (
+          <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+        )}
+        {error ? (
+          <div className="absolute inset-0 bg-gray-300 flex items-center justify-center">
+            <span className="text-gray-500 text-sm">ไม่สามารถโหลดรูปได้</span>
+          </div>
+        ) : (
+          <img
+            src={src}
+            alt={alt}
+            className={`w-full transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'} ${onClick ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
+            onLoad={() => setLoaded(true)}
+            onError={() => setError(true)}
+            onClick={onClick}
+            loading="lazy"
+          />
+        )}
+      </div>
+    );
+  }, []);
 
   // Show loading state
   if (isInitialLoading) {
@@ -401,7 +572,6 @@ const PolicyDetailPage = () => {
       </div>
     );
   }
-
 
   return (
     <div className="font-prompt">
@@ -492,20 +662,20 @@ const PolicyDetailPage = () => {
               />
             )}
 
-
-            {/* Enhanced Like Button */}
+            {/* Enhanced Like Button with better visual feedback */}
             <button
+              data-like-button
               onClick={handleLike}
               disabled={likeState.isLoading}
-              className="focus:outline-none relative group transition-transform hover:scale-110 disabled:opacity-50"
+              className="focus:outline-none relative group transition-all duration-200 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
               title={likeState.isLiked ? "กดเพื่อยกเลิกไลค์" : "กดเพื่อไลค์"}
             >
               <Heart
                 size={26}
                 fill={likeState.isLiked ? "currentColor" : "none"}
-                className={`transition-colors ${likeState.isLiked
-                    ? "text-[#e32222] animate-pulse"
-                    : "text-gray-200 group-hover:text-pink-300"
+                className={`transition-all duration-300 ${likeState.isLiked
+                  ? "text-[#e32222] drop-shadow-lg"
+                  : "text-gray-200 group-hover:text-pink-300 group-hover:scale-110"
                   }`}
               />
               {likeState.isLoading && (
@@ -515,7 +685,7 @@ const PolicyDetailPage = () => {
               )}
             </button>
 
-            <span className="text-white text-lg font-semibold">
+            <span className="text-white text-lg font-semibold tabular-nums">
               {likeState.count.toLocaleString()}
             </span>
           </div>
@@ -531,7 +701,7 @@ const PolicyDetailPage = () => {
               className="object-cover brightness-75"
               priority
               sizes="100vw"
-              onError={() => setBannerUrl("/default-banner.jpg")}
+              onError={() => setBannerUrl("")}
             />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-r from-[#5D5A88] to-[#47457b]"></div>
@@ -540,16 +710,17 @@ const PolicyDetailPage = () => {
           {party && (
             <div className="absolute top-4 right-6 w-[60px] h-[60px] z-20">
               <Image
-                src={`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${encodeURIComponent(party.name)}.png?alt=media`}
+                src={`https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.firebasestorage.app/o/party%2Flogo%2F${party.id}.png?alt=media`}
                 alt="โลโก้พรรค"
                 width={60}
                 height={60}
                 className="object-contain"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                  target.src = "/default-logo.png";
+                  target.src = "/default-logo.png"; // fallback
                 }}
               />
+
             </div>
           )}
 
@@ -579,7 +750,7 @@ const PolicyDetailPage = () => {
         </div>
 
         <div className="w-5/6 mx-auto">
-          <h2 className="text-[#2C3E50] font-bold my-10">ลำดับเหตุการณ์</h2>
+          <h2 className="text-[#2C3E50] font-bold text-2xl my-10">ลำดับเหตุการณ์</h2>
 
           {timeline.length > 0 ? (
             <>
@@ -604,7 +775,7 @@ const PolicyDetailPage = () => {
                         className="min-w-[220px] max-w-[400px] bg-white border border-gray-200 rounded-lg px-4 py-3 flex-shrink-0 shadow hover:shadow-md transition relative"
                       >
                         <div className="w-3 h-3 bg-[#5D5A88] rounded-full absolute -left-1 top-4 border-2 border-white"></div>
-                        <h3 className="text-md font-bold text-[#5D5A88] mb-1">{item.name}</h3>
+                        <h3 className="text-md font-bold text-xl text-[#5D5A88] mb-1">{item.name}</h3>
                         <p className="text-sm text-gray-500 mb-2">{item.date}</p>
                         <p className="text-sm text-gray-600">{item.description}</p>
                       </div>
@@ -639,31 +810,30 @@ const PolicyDetailPage = () => {
             <p className="text-gray-500 text-center">ไม่มีเหตุการณ์ในนโยบายนี้</p>
           )}
 
-          <h2 className="text-[#2C3E50] font-bold my-10">ความสำเร็จ</h2>
+          <h2 className="text-[#2C3E50] font-bold text-2xl my-10">ความสำเร็จ</h2>
           <div className="flex justify-center h-[300px]">
             <div className="grid grid-cols-3 gap-6 w-1/2 mt-10 mb-10 max-w-[900px] w-full">
               <div className="border border-gray-300 bg-white rounded-xl p-4 text-center max-w-[300px] transition-shadow hover:shadow-md">
-                <h3 className="text-[#2C3E50] mb-3 font-semibold">เชิงโครงการ</h3>
+                <h3 className="text-[#2C3E50] mb-3 font-bold text-xl">เชิงโครงการ</h3>
                 <p className="text-[#2C3E50]">{achievement.project?.description || "-"}</p>
               </div>
               <div className="border border-gray-300 bg-white rounded-xl p-4 text-center max-w-[300px] transition-shadow hover:shadow-md">
-                <h3 className="text-[#2C3E50] mb-3 font-semibold">เชิงกระบวนการ</h3>
+                <h3 className="text-[#2C3E50] mb-3 font-bold text-xl">เชิงกระบวนการ</h3>
                 <p className="text-[#2C3E50]">{achievement.process?.description || "-"}</p>
               </div>
-              <div className="border border-gray-300 bg-white rounded-xl p-4 text-center max-w-[300px]">
-                <h3 className="text-[#2C3E50] mb-3">เชิงนโยบาย</h3>
+              <div className="border border-gray-300 bg-white rounded-xl p-4 text-center max-w-[300px] transition-shadow hover:shadow-md">
+                <h3 className="text-[#2C3E50] mb-3 font-bold text-xl">เชิงนโยบาย</h3>
                 <p className="text-[#2C3E50]">{achievement.policy?.description || "-"}</p>
               </div>
             </div>
           </div>
 
-
-          <h2 className="text-[#2C3E50] font-bold my-10">โครงการที่เกี่ยวข้อง</h2>
+          <h2 className="text-[#2C3E50] font-bold text-2xl  my-10">โครงการที่เกี่ยวข้อง</h2>
 
           {relatedProjects.filter(p => p.name?.trim()).length > 0 ? (
             <div className="grid grid-cols-2 gap-6 mt-4 mb-20">
               {relatedProjects
-                .filter((project) => project.name?.trim()) // ✅ กรอง name ที่ว่าง/null
+                .filter((project) => project.name?.trim())
                 .map((project) => (
                   <Link
                     key={project.name}
@@ -671,7 +841,7 @@ const PolicyDetailPage = () => {
                     className="no-underline"
                   >
                     <div className="border border-gray-300 bg-white rounded-xl p-4 hover:shadow-md transition cursor-pointer h-full">
-                      <h3 className="text-[#2C3E50] mb-2">{project.name}</h3>
+                      <h3 className="text-[#2C3E50] mb-2 font-bold text-xl">{project.name}</h3>
                       <p className="text-[#2C3E50]">{project.description}</p>
                     </div>
                   </Link>
@@ -685,57 +855,121 @@ const PolicyDetailPage = () => {
             </div>
           )}
 
-
-
+          {pdfUrl && (
+            <div className="mt-6 bg-white border border-gray-200 rounded-xl p-4 shadow hover:shadow-lg transition">
+              <h3 className="font-bold text-xl text-[#2C3E50] mb-2">📄 เอกสารอ้างอิง</h3>
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#5D5A88] underline hover:text-[#3e3a6d]"
+              >
+                🔗 เปิดเอกสารอ้างอิง
+              </a>
+            </div>
+          )}
         </div>
 
-        <h2 className="text-[#2C3E50] text-center font-bold my-10">แกลอรี่รูปภาพ</h2>
+
+        {/* Enhanced Gallery Section with Optimized Loading */}
+        <h2 className="text-[#2C3E50] text-2xl text-center font-bold my-10">แกลเลอรี่รูปภาพ</h2>
         <section className="bg-white py-12">
           <div className="max-w-6xl mx-auto px-4">
+            {galleryLoading && visibleGalleryCount === 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="aspect-square bg-gray-200 animate-pulse rounded-lg" />
+                ))}
+              </div>
+            ) : galleryImages.length > 0 ? (
+              <>
+                {/* Optimized Masonry Grid */}
+                <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 space-y-4">
+                  {galleryImages.slice(0, visibleGalleryCount).map((image, idx) => (
+                    <div
+                      key={idx}
+                      className="relative break-inside-avoid mb-4 overflow-hidden rounded-xl shadow-lg group cursor-pointer"
+                      onClick={() => setSelectedUrl(image.url)}
+                    >
+                      <OptimizedImage
+                        src={image.url}
+                        alt={`แกลเลอรี่รูปที่ ${idx + 1}`}
+                        className="w-full transition-transform duration-300 group-hover:scale-105"
+                      />
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+                      {/* Caption */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black via-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <span className="text-sm text-white font-medium">รูปที่ {idx + 1}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-            {/* Masonry columns */}
-            <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 space-y-4">
-              {galleryUrls.length > 0 ? (
-                galleryUrls.map((url, idx) => (
-                  <div
-                    key={idx}
-                    className="relative break-inside-avoid mb-4 overflow-hidden rounded-xl shadow-lg group cursor-pointer"
-                    onClick={() => setSelectedUrl(url)}
-                  >
-                    <img
-                      src={url}
-                      alt={`รูปที่ ${idx + 1}`}
-                      className="w-full transition-transform duration-300 group-hover:scale-105"
-                    />
-                    {/* Overlay ด้านบนภาพ */}
-                    <div className="absolute inset-0 bg-black bg-opacity-30 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    {/* Caption */}
-                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-sm text-white">รูปที่ {idx + 1}</span>
+                {/* Load More Trigger */}
+                {visibleGalleryCount < galleryImages.length && (
+                  <div ref={loadMoreRef} className="text-center mt-8">
+                    <div className="inline-flex items-center space-x-2 text-gray-500">
+                      <div className="w-5 h-5 border-2 border-gray-300 border-t-[#5D5A88] rounded-full animate-spin"></div>
+                      <span>กำลังโหลดรูปเพิ่มเติม...</span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-center text-gray-500">ไม่มีรูปภาพในแกลเลอรี</p>
-              )}
-            </div>
+                )}
+
+                {/* Gallery Stats */}
+                <div className="text-center mt-6 text-sm text-gray-500">
+                  แสดง {Math.min(visibleGalleryCount, galleryImages.length)} จาก {galleryImages.length} รูป
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="inline-flex flex-col items-center space-y-3">
+                  <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-500 text-lg">ไม่มีรูปภาพในแกลเลอรี</p>
+                  <p className="text-gray-400 text-sm">รูปภาพจะปรากฏที่นี่เมื่อมีการอัพโหลด</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Lightbox */}
+          {/* Enhanced Lightbox Modal */}
           {selectedUrl && (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 p-4"
               onClick={() => setSelectedUrl(null)}
             >
-              <img
-                src={selectedUrl}
-                alt="ขยายภาพ"
-                className="max-w-full max-h-full rounded-lg shadow-2xl"
-              />
+              <div className="relative max-w-full max-h-full">
+                {/* Close Button */}
+                <button
+                  onClick={() => setSelectedUrl(null)}
+                  className="absolute top-4 right-4 z-10 w-10 h-10 bg-black bg-opacity-50 hover:bg-opacity-70 rounded-full flex items-center justify-center text-white transition-all duration-200"
+                  aria-label="ปิดรูป"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
+                {/* Main Image */}
+                <img
+                  src={selectedUrl}
+                  alt="ขยายภาพ"
+                  className="max-w-full max-h-full rounded-lg shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                />
+
+                {/* Image Counter */}
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm">
+                  {galleryImages.findIndex(img => img.url === selectedUrl) + 1} / {galleryImages.length}
+                </div>
+              </div>
             </div>
           )}
         </section>
-
 
         <Footer />
       </div>

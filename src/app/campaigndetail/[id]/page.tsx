@@ -162,7 +162,7 @@ const idString =
       if (!name) return;
 
       try {
-        const pdfRef = ref(storage, `campaign/reference/${name}.pdf`);
+        const pdfRef = ref(storage, `campaign/reference/${campaignId}.pdf`);
         const url = await getDownloadURL(pdfRef);
         setPdfUrl(url);
       } catch (err) {
@@ -565,7 +565,6 @@ const formatMoney = (val: any) =>
   </div>
 )}
 
-                  
              
               {pdfUrl && (
             <div className="mt-6 bg-white border border-gray-200 rounded-xl p-4 shadow hover:shadow-lg transition">

@@ -136,6 +136,7 @@ export default function CampaignListPage() {
                     className="absolute top-2 right-2 w-16 h-16 object-contain"
                   />
                   <h3 className="text-xl font-semibold text-[#5D5A88]">{c.name}</h3>
+                  <br />
                   <p className="text-gray-600 mb-1">รายละเอียด: {c.description || "-"}</p>
                   <p className="text-gray-600 mb-1">นโยบาย: {c.policy}</p>
                   <p className="text-gray-600 mb-1">สถานะ: {c.status}</p>

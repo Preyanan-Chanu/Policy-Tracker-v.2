@@ -235,7 +235,7 @@ export default function PRPolicyForm() {
         name: policyName,
         description: policyDes,
         banner: bannerUrl,
-         status: policyStatus,
+        status: policyStatus,
         category: policyCategory,
         party: partyName,
       };
@@ -274,7 +274,9 @@ export default function PRPolicyForm() {
 
       if (pictures.length > 0) {
         const uploadPromises = pictures.map((file) => {
-          const uniqueName = `${Date.now()}_${file.name}`;
+          const ext = file.name.split('.').pop();
+          const random = Math.random().toString(36).substring(2, 8);
+          const uniqueName = `${Date.now()}_${random}.${ext}`;
           const picRef = ref(storage, `policy/picture/${idUsed}/${uniqueName}`);
           return uploadBytes(picRef, file);
         });
@@ -286,6 +288,7 @@ export default function PRPolicyForm() {
         const urls = await Promise.all(result.items.map((itemRef) => getDownloadURL(itemRef)));
         setPictureUrls(urls);
       }
+
 
       // ✅ อัปเดต achievement ทั้ง 3
       await Promise.all([
@@ -377,9 +380,9 @@ export default function PRPolicyForm() {
               </select>
 
               <label className="block font-bold">รายละเอียดนโยบาย:</label>
-              <textarea value={policyDes} onChange={(e) => setPolicyDes(e.target.value)} rows={5} required 
-              placeholder="นโยบายรถไฟฟ้า 20 บาทตลอดสาย (หรือ การปรับลดค่าโดยสารรถไฟฟ้าสูงสุดไม่เกิน 20 บาท) เป็นหนึ่งในนโยบายปฏิบัติการเร่งรัด (Quick Win) ของรัฐบาลในด้าน “คมนาคม เพื่อความอุดมสุขของประชาชน” เพื่อช่วยลดภาระค่าครองชีพให้แก่ประชาชน" 
-              className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={policyDes} onChange={(e) => setPolicyDes(e.target.value)} rows={5} required
+                placeholder="นโยบายรถไฟฟ้า 20 บาทตลอดสาย (หรือ การปรับลดค่าโดยสารรถไฟฟ้าสูงสุดไม่เกิน 20 บาท) เป็นหนึ่งในนโยบายปฏิบัติการเร่งรัด (Quick Win) ของรัฐบาลในด้าน “คมนาคม เพื่อความอุดมสุขของประชาชน” เพื่อช่วยลดภาระค่าครองชีพให้แก่ประชาชน"
+                className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">สถานะนโยบาย:</label>
               <select

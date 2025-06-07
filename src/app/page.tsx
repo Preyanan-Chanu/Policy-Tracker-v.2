@@ -281,36 +281,46 @@ const logoUrl = `https://firebasestorage.googleapis.com/v0/b/policy-tracker-kp.f
 console.log("LOGO URL:", logoUrl);
     return (
 
-       <li
-   key={i}
-   className="flex items-center border-b pb-1 cursor-pointer transition-colors hover:bg-gray-100"
-   onClick={() => router.push(`/policydetail/${p.id}`)}  //คลิ๊กนโยบาย
- >
-        <div className="flex items-center space-x-2 flex-1">
-          {stepMap[p.status] && (
-            <div
-              className="w-6 h-6 flex items-center justify-center rounded-full text-white text-sm font-semibold"
-              style={{ backgroundColor: stepMap[p.status].color }}
-            >
-              {stepMap[p.status].step}
-            </div>
-          )}
-          <span className="flex-1 truncate text-left">
-  {p.name}
-  <span className="text-sm text-gray-500 ml-2">
-    ({p.progress?.toFixed(1) ?? 0}%)
-  </span>
-</span>
-        </div>
-        <img
-          src={logoUrl}
-          alt={`โลโก้ของ ${p.partyName}`}
-          className="w-6 h-6 object-contain ml-3"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "/default-logo.png";
-          }}
-        />
-      </li>
+<li
+  key={i}
+  className="flex items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
+  onClick={() => router.push(`/policydetail/${p.id}`)}
+>
+  {/* container หลัก: flex-1 เพื่อให้ใช้พื้นที่ที่เหลือ และ min-w-0 เพื่อให้ truncate ทำงานได้ */}
+  <div className="flex items-center flex-1 min-w-0 space-x-2">
+    {/* สถานะ: กำหนด flex-shrink-0 ให้ไม่ถูกยุบ */}
+    {stepMap[p.status] && (
+      <div
+        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-white text-sm font-semibold"
+        style={{ backgroundColor: stepMap[p.status].color }}
+      >
+        {stepMap[p.status].step}
+      </div>
+    )}
+
+    {/* ชื่อ: flex-1 + min-w-0 + truncate เพื่อใช้พื้นที่คั่นกลางและตัดด้วย ... */}
+    <span className="flex-1 min-w-0 truncate text-left">
+      {p.name}
+    </span>
+
+    {/* เปอร์เซ็นต์: flex-shrink-0 ให้ไม่ยุบเช่นกัน */}
+    <span className="flex-shrink-0 text-sm text-gray-500 ml-2">
+      ({p.progress?.toFixed(1) ?? 0}%)
+    </span>
+  </div>
+
+  {/* โลโก้พรรค วางชิดขวาสุด */}
+  <img
+    src={logoUrl}
+    alt={`โลโก้ของ ${p.partyName}`}
+    className="w-6 h-6 object-contain ml-3 flex-shrink-0"
+    onError={(e) => {
+      (e.target as HTMLImageElement).src = "/default-logo.png";
+    }}
+  />
+</li>
+
+
     );
   })}
 </ul>
@@ -345,65 +355,73 @@ console.log("LOGO URL:", logoUrl);
   </h2>
   <div className="flex space-x-10 mt-10 justify-center">
 
-        {/* Left card: แสดง 5 นโยบายยอดนิยม */}
-<div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between transition-transform hover:scale-105">      <div>
+    {/* Left card: แสดง 5 นโยบายยอดนิยม */}
+    <div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-6 flex flex-col justify-between transition-transform hover:scale-105">
+      <div>
         <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
-          นโยบายที่ได้รับความสนใจสูงสุด
+          นโยบายยอดนิยม
         </h3>
         <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
           {popularPolicies.map((p) => (
             <li
               key={p.id}
-              className="flex justify-between items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
-              onClick={() => router.push(`/policydetail/${p.id}`)}  // คลิกแล้วไป detail
+              className="flex items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
+              onClick={() => router.push(`/policydetail/${p.id}`)}
             >
-           <span className="truncate">{p.policyName}</span>
-              <span>👍 {p.likeCount}</span>
-              </li>
+              <span className="flex-1 min-w-0 truncate">
+                {p.policyName}
+              </span>
+              <span className="flex-shrink-0 ml-2">
+                👍 {p.likeCount}
+              </span>
+             
+            </li>
           ))}
         </ul>
       </div>
       <div className="text-right mt-2">
         <Link
           href={`/policycategory`}
-          className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
-        >
+          className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]">
           ดูเพิ่มเติม &rarr;
         </Link>
       </div>
     </div>
 
+    {/* Right card: แสดง 5 นโยบายล่าสุด */}
+    <div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-6 flex flex-col justify-between transition-transform hover:scale-105">
+      <div>
+        <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
+          นโยบายใหม่ล่าสุด
+        </h3>
+        <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
+          {latestPolicies.slice(0, 5).map((p) => (
+            <li
+              key={p.id}
+              className="flex items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
+              onClick={() => router.push(`/policydetail/${p.id}`)}
+            >
+              <span className="flex-1 min-w-0 truncate">
+                {p.policyName}
+              </span>
+             
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="text-right mt-2">
+        <Link
+          href={`/policycategory`}
+          className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]">
+          ดูเพิ่มเติม &rarr;
+        </Link>
+      </div>
+    </div>
 
-      {/* Right card: แสดง 5 นโยบายล่าสุด */}
-    <div className="card2 w-[610px] h-[340px] bg-white shadow-md rounded-xl border-2 border-[#5D5A88] p-4 flex flex-col justify-between transition-transform hover:scale-105">
-  <div>
-    <h3 className="text-2xl font-bold mb-4 text-[#5D5A88]">
-      นโยบายใหม่ล่าสุด
-    </h3>
-    <ul className="list-none pl-0 text-xl text-left text-[#3f3c62] space-y-2">
-      {latestPolicies.slice(0, 5).map((p) => (
-        <li
-          key={p.id}
-          className="flex justify-between items-center border-b pb-1 cursor-pointer hover:bg-gray-100"
-          onClick={() => router.push(`/policydetail/${p.id}`)}
-        >
-          <span className="truncate">{p.policyName}</span>
-        </li>
-      ))}
-    </ul>
   </div>
-  <div className="text-right mt-2">
-    <Link
-      href="/policycategory"
-      className="text-sm text-[#5D5A88] underline hover:text-[#3f3c62]"
-    >
-      ดูเพิ่มเติม &rarr;
-    </Link>
-  </div>
-</div>
-  </div>
-
 </section>
+
+
 
 
       </main>

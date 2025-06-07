@@ -208,21 +208,29 @@ export default function PREventForm() {
     }
 
     // ✅ ลบรูปภาพที่เลือกไว้
-    for (const path of picturesToDelete) {
-      try {
-        const fileRef = ref(storage, path);
-        await deleteObject(fileRef);
-      } catch (err) {
-        console.warn("ลบภาพไม่สำเร็จ:", err);
-      }
+    if (picturesToDelete.length > 0) {
+  for (const path of picturesToDelete) {
+    try {
+      await deleteObject(ref(storage, path));
+    } catch (err) {
+      console.warn("⚠️ ลบรูปไม่สำเร็จ:", err);
     }
+  }
+}
 
     // ✅ อัปโหลดภาพใหม่
-    for (const file of eventPictures) {
-      const uniqueName = `${Date.now()}_${file.name}`;
-      const imageRef = ref(storage, `event/picture/${id}/${uniqueName}`);
-      await uploadBytes(imageRef, file);
-    }
+    if (eventPictures.length > 0) {
+  for (const file of eventPictures) {
+    const timestamp = Date.now();
+    const ext = file.name.split('.').pop();
+    const random = Math.random().toString(36).substring(2, 8);
+    const filename = `${timestamp}_${random}.${ext}`;
+    const imageRef = ref(storage, `event/picture/${id}/${filename}`);
+    await uploadBytes(imageRef, file);
+  }
+}
+
+
 
     if (res.ok) {
       alert(eventId ? "✅ แก้ไขกิจกรรมสำเร็จ" : "✅ บันทึกกิจกรรมสำเร็จ");

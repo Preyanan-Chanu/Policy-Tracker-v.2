@@ -10,9 +10,9 @@ import PRSidebar from "@/app/components/PRSidebar";
 export default function PRCampaignForm() {
 
   interface PolicyOption {
-  id: string;
-  name: string;
-}
+    id: string;
+    name: string;
+  }
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [campaignName, setCampaignName] = useState("");
@@ -43,7 +43,7 @@ export default function PRCampaignForm() {
 
   const router = useRouter();
 
-  
+
 
   useEffect(() => {
     type Area = "เขตเดียว" | "หลายเขต" | "ทั่วประเทศ";
@@ -66,27 +66,27 @@ export default function PRCampaignForm() {
     setSize(mapSize[key] || "เล็ก");
   }, [area, impact]);
 
-useEffect(() => {
-  const storedId = localStorage.getItem("partyId");
+  useEffect(() => {
+    const storedId = localStorage.getItem("partyId");
     const storedName = localStorage.getItem("partyName"); // ✅ เพิ่มบรรทัดนี้
 
-if (storedId) {
-  setPartyId(Number(storedId)); // 🟢 แปลงเป็นเลข
-  fetch(`/api/prCampaignForm?party_id=${storedId}`)
-    .then((res) => res.json())
-    .then((data) => {
-      let list = data ?? [];
-      if (!list.some((p: { name: string }) => p.name === "โครงการพิเศษ")) {
-        list = [{ id: "special", name: "โครงการพิเศษ" }, ...list];
-      }
-      setPolicies(list);
-    });
-}
-   if (storedName) {
-    setPartyName(storedName); // ✅ เซ็ตค่าพรรค
-  }
+    if (storedId) {
+      setPartyId(Number(storedId)); // 🟢 แปลงเป็นเลข
+      fetch(`/api/prCampaignForm?party_id=${storedId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          let list = data ?? [];
+          if (!list.some((p: { name: string }) => p.name === "โครงการพิเศษ")) {
+            list = [{ id: "special", name: "โครงการพิเศษ" }, ...list];
+          }
+          setPolicies(list);
+        });
+    }
+    if (storedName) {
+      setPartyName(storedName); // ✅ เซ็ตค่าพรรค
+    }
 
-}, []);
+  }, []);
 
 
   useEffect(() => {
@@ -107,10 +107,10 @@ if (storedId) {
       setExpenses(data.expenses || [{ description: "", amount: "" }]);
 
       if (!data.isSpecial) {
-      setPolicyId(data.policyId?.toString() || "");
-    } else {
-      setPolicyId("special");
-    }
+        setPolicyId(data.policyId?.toString() || "");
+      } else {
+        setPolicyId("special");
+      }
 
       // try {
       //   setBannerPreviewUrl(await getDownloadURL(ref(storage, `campaign/banner/${campaignId}.jpg`)));
@@ -118,13 +118,13 @@ if (storedId) {
 
       try {
         setRefPreviewUrl(await getDownloadURL(ref(storage, `campaign/reference/${campaignId}.pdf`)));
-      } catch {}
+      } catch { }
 
       try {
         const listResult = await listAll(ref(storage, `campaign/picture/${campaignId}`));
         const urls = await Promise.all(listResult.items.map((item) => getDownloadURL(item)));
         setUploadedPictureUrls(urls);
-      } catch {}
+      } catch { }
     };
 
     fetchCampaign();
@@ -140,10 +140,10 @@ if (storedId) {
   };
 
   const handleExpenseChange = (index: number, field: "description" | "amount", value: string) => {
-  const updated = [...expenses];
-  updated[index] = { ...updated[index], [field]: value };
-  setExpenses(updated);
-};
+    const updated = [...expenses];
+    updated[index] = { ...updated[index], [field]: value };
+    setExpenses(updated);
+  };
 
   const addExpenseRow = () => {
     setExpenses([...expenses, { description: "", amount: "" }]);
@@ -151,8 +151,8 @@ if (storedId) {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-     setIsSubmitting(true);
-     
+    setIsSubmitting(true);
+
     const isSpecial = policyId === "special";
     let finalId: string | null = campaignId;
 
@@ -164,7 +164,7 @@ if (storedId) {
         status: campaignStatus,
         policy: isSpecial ? "โครงการพิเศษ" : policyName,
         policyId: isSpecial ? null : Number(policyId),
-         partyId: Number(partyId),
+        partyId: Number(partyId),
         budget: Number(campaignBudget),
         expenses: expenses.map((e) => ({ ...e, amount: Number(e.amount) })),
         //banner: "",
@@ -174,7 +174,7 @@ if (storedId) {
         size,
       };
 
-    const res = await fetch(campaignId ? `/api/pr-campaign/${campaignId}` : `/api/prCampaignForm`, {
+      const res = await fetch(campaignId ? `/api/pr-campaign/${campaignId}` : `/api/prCampaignForm`, {
         method: campaignId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -187,36 +187,39 @@ if (storedId) {
         return;
       }
 
-      // 📤 อัปโหลดไฟล์หลังรู้ finalId
-      /*if (campaignBanner) {
-        await uploadBytes(ref(storage, `campaign/banner/${finalId}.jpg`), campaignBanner);
-      }*/
-
       if (campaignRef) {
         await uploadBytes(ref(storage, `campaign/reference/${finalId}.pdf`), campaignRef);
       }
 
-      for (const path of picturesToDelete) {
-        try {
-          await deleteObject(ref(storage, path));
-        } catch (err) {
-          console.warn("⚠️ ลบรูปไม่สำเร็จ:", err);
+      if (picturesToDelete.length > 0) {
+        for (const path of picturesToDelete) {
+          try {
+            await deleteObject(ref(storage, path));
+          } catch (err) {
+            console.warn("⚠️ ลบรูปไม่สำเร็จ:", err);
+          }
         }
       }
 
-    for (const file of campaignPictures) {
-        const uniqueName = `${Date.now()}_${file.name}`;
-        await uploadBytes(ref(storage, `campaign/picture/${finalId}/${uniqueName}`), file);
+      if (campaignPictures.length > 0) {
+        for (const file of campaignPictures) {
+          const timestamp = Date.now();
+          const ext = file.name.split('.').pop();
+          const random = Math.random().toString(36).substring(2, 8);
+          const filename = `${timestamp}_${random}.${ext}`;
+          await uploadBytes(ref(storage, `campaign/picture/${finalId}/${filename}`), file);
+        }
       }
+
 
       alert(campaignId ? "✅ แก้ไขโครงการสำเร็จ" : "✅ สร้างโครงการสำเร็จ");
       router.push("/prCampaign");
     } catch (err) {
       console.error("❌ Error saving campaign:", err);
       alert("❌ เกิดข้อผิดพลาดในการบันทึก");
-      } finally {
-    setIsSubmitting(false); // ✅ หยุดโหลดไม่ว่าจะสำเร็จหรือ error
-  } 
+    } finally {
+      setIsSubmitting(false); // ✅ หยุดโหลดไม่ว่าจะสำเร็จหรือ error
+    }
   };
 
 
@@ -236,33 +239,33 @@ if (storedId) {
               <input value={campaignName} onChange={(e) => setCampaignName(e.target.value)} required placeholder="สร้าง Floodway ขนาดใหญ่" className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">รายละเอียดโครงการ:</label>
-              <textarea value={campaignDes} onChange={(e) => setCampaignDes(e.target.value)} rows={5} required 
-              placeholder="นอกจากการขุดลอกคูคลอง แน่นอนว่าต้องมีนโยบายและโครงสร้างขนาดใหญ่อื่นๆ มารองรับ โดยเฉพาะกรุงเทพมหานครที่มีโอกาสถูกน้ำท่วมเมืองได้ หนึ่งในโครงสร้างใหญ่ คือการสร้าง Floodway เพื่อแก้ปัญหาน้ำท่วมเมืองอย่างจริงจัง" 
-              className="w-full p-2 border border-gray-300 rounded-md" />
+              <textarea value={campaignDes} onChange={(e) => setCampaignDes(e.target.value)} rows={5} required
+                placeholder="นอกจากการขุดลอกคูคลอง แน่นอนว่าต้องมีนโยบายและโครงสร้างขนาดใหญ่อื่นๆ มารองรับ โดยเฉพาะกรุงเทพมหานครที่มีโอกาสถูกน้ำท่วมเมืองได้ หนึ่งในโครงสร้างใหญ่ คือการสร้าง Floodway เพื่อแก้ปัญหาน้ำท่วมเมืองอย่างจริงจัง"
+                className="w-full p-2 border border-gray-300 rounded-md" />
 
               <label className="block font-bold">นโยบายที่เกี่ยวข้อง:</label>
               <select
-  value={policyId}
-  onChange={(e) => {
-    const selected = e.target.value;
-    setPolicyId(selected);
-    if (selected === "special") {
-      setPolicyName("โครงการพิเศษ");
-    } else {
-      const found = policies.find((p) => p.id.toString() === selected);
-      setPolicyName(found?.name || "");
-    }
-  }}
-  required
-  className="w-full p-2 border border-gray-300 rounded-md"
->
-  <option value="">-- เลือกนโยบาย --</option>
-  {policies.map((p) => (
-    <option key={p.id} value={p.id}>
-      {p.name}
-    </option>
-  ))}
-</select>
+                value={policyId}
+                onChange={(e) => {
+                  const selected = e.target.value;
+                  setPolicyId(selected);
+                  if (selected === "special") {
+                    setPolicyName("โครงการพิเศษ");
+                  } else {
+                    const found = policies.find((p) => p.id.toString() === selected);
+                    setPolicyName(found?.name || "");
+                  }
+                }}
+                required
+                className="w-full p-2 border border-gray-300 rounded-md"
+              >
+                <option value="">-- เลือกนโยบาย --</option>
+                {policies.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
 
 
               <label className="block font-bold">สถานะโครงการ:</label>
@@ -290,55 +293,55 @@ if (storedId) {
               <input value={size} readOnly className="w-full p-2 border border-gray-300 rounded-md bg-gray-100" />
 
               <label className="block font-bold">งบประมาณที่ได้รับ (บาท):</label>
-<input
-  type="text"
-  inputMode="numeric"
-  value={Number(campaignBudget || 0).toLocaleString("th-TH")}
-  onChange={(e) => {
-    const raw = e.target.value.replace(/,/g, ""); // ลบ ,
-    const numeric = parseInt(raw, 10) || 0;
-    setCampaignBudget(numeric.toString());
-  }}
-  required
-  placeholder="4,500,000"
-  className="w-full p-2 border border-gray-300 rounded-md"
-/>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={Number(campaignBudget || 0).toLocaleString("th-TH")}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/,/g, ""); // ลบ ,
+                  const numeric = parseInt(raw, 10) || 0;
+                  setCampaignBudget(numeric.toString());
+                }}
+                required
+                placeholder="4,500,000"
+                className="w-full p-2 border border-gray-300 rounded-md"
+              />
 
 
               <label className="block font-bold">รายการรายจ่าย:</label>
               {expenses.map((exp, idx) => (
                 <div key={idx} className="flex space-x-2">
-    {/* รายการรายจ่าย */}
-    <input
-      type="text"
-      value={exp.description}
-      onChange={(e) => handleExpenseChange(idx, "description", e.target.value)}
-      placeholder="ค่าดำเนินการ"
-      className="w-2/3 p-2 border rounded"
-    />
+                  {/* รายการรายจ่าย */}
+                  <input
+                    type="text"
+                    value={exp.description}
+                    onChange={(e) => handleExpenseChange(idx, "description", e.target.value)}
+                    placeholder="ค่าดำเนินการ"
+                    className="w-2/3 p-2 border rounded"
+                  />
 
-    {/* จำนวนเงิน แบบมี , */}
-    <input
-      type="text"
-      inputMode="numeric"
-      value={Number(exp.amount || 0).toLocaleString("th-TH")}
-      onChange={(e) => {
-        const raw = e.target.value.replace(/,/g, "");
-        const numeric = parseInt(raw, 10) || 0;
-        handleExpenseChange(idx, "amount", numeric.toString()); // ✅ ส่งเป็น string
-      }}
-      placeholder="จำนวนเงิน"
-      className="w-1/3 p-2 border rounded"
-    />
-  </div>
-))}
+                  {/* จำนวนเงิน แบบมี , */}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={Number(exp.amount || 0).toLocaleString("th-TH")}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/,/g, "");
+                      const numeric = parseInt(raw, 10) || 0;
+                      handleExpenseChange(idx, "amount", numeric.toString()); // ✅ ส่งเป็น string
+                    }}
+                    placeholder="จำนวนเงิน"
+                    className="w-1/3 p-2 border rounded"
+                  />
+                </div>
+              ))}
               <button type="button" onClick={addExpenseRow} className="text-sm text-blue-500">+ เพิ่มรายการ</button>
 
               <p className="text-gray-500">
                 รวมรายจ่ายทั้งหมด: {expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toLocaleString()} บาท
               </p>
 
-              
+
 
 
               <label className="block font-bold">อัปโหลดรูปภาพเพิ่มเติม:</label>
@@ -421,17 +424,17 @@ if (storedId) {
               )}
 
               <button
-  type="submit"
-  disabled={isSubmitting}
-  className={`w-full p-3 rounded-md mt-4 transition
+                type="submit"
+                disabled={isSubmitting}
+                className={`w-full p-3 rounded-md mt-4 transition
     ${isSubmitting ? "bg-gray-400 cursor-not-allowed" : "bg-[#5D5A88] hover:bg-[#46426b] text-white"}`}
->
-  {isSubmitting
-    ? "⏳ กำลังบันทึก..."
-    : campaignId
-    ? "บันทึกการแก้ไข"
-    : "บันทึกโครงการ"}
-</button>
+              >
+                {isSubmitting
+                  ? "⏳ กำลังบันทึก..."
+                  : campaignId
+                    ? "บันทึกการแก้ไข"
+                    : "บันทึกโครงการ"}
+              </button>
 
             </form>
           </div>

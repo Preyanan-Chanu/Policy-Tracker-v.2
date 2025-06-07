@@ -39,8 +39,9 @@ const PolicyPage = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>("ทั้งหมด");
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const [likesMap, setLikesMap] = useState<Record<number, number>>({});
-  const [likedState, setLikedState] = useState<Record<number, boolean>>({});
+  const [likesMap, setLikesMap] = useState<Record<string, number>>({});
+  const [likedState, setLikedState] = useState<Record<string, boolean>>({});
+
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [isLiking, setIsLiking] = useState<Record<number, boolean>>({});
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -111,7 +112,6 @@ const PolicyPage = () => {
           partyId: Number(p.partyId) || 0,
           categoryName: String(p.categoryName || "ไม่ระบุหมวดหมู่"),
           budget: Number(p.budget) || 0,
-          uniqueKey: `policy_${policyId}_${idx}_${Date.now()}`,
         } as Policy;
       });
 
@@ -154,12 +154,14 @@ const PolicyPage = () => {
       const results = await Promise.all(promises);
 
       const newLikesMap: Record<number, number> = {};
-      const newLikedState: Record<number, boolean> = {};
+const newLikedState: Record<number, boolean> = {};
+
 
       results.forEach(({ policyId, count, liked }) => {
-        newLikesMap[policyId] = count;
-        newLikedState[policyId] = liked;
-      });
+  newLikesMap[policyId] = count;
+  newLikedState[policyId] = liked;
+});
+
 
       setLikesMap(newLikesMap);
       setLikedState(newLikedState);
@@ -170,70 +172,71 @@ const PolicyPage = () => {
 
   // Enhanced like handler with better error handling
   const handleLike = async (policyId: number) => {
-  const pid = Number(policyId);
-  console.log("🖱️ กดไลก์ policy:", pid);
+    const pid = Number(policyId);
+    console.log("🖱️ กดไลก์ policy:", pid);
 
-  if (!fingerprint) {
-    setErrorMessage("ระบบกำลังโหลด กรุณารอสักครู่");
-    return;
-  }
-
-  if (isLiking[pid]) {
-    console.warn("⚠️ กำลังประมวลผลอยู่");
-    return;
-  }
-
-  setIsLiking(prev => ({ ...prev, [pid]: true }));
-  setErrorMessage("");
-
-  try {
-    const res = await fetch("/api/policylike", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: pid, fingerprint }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      switch (res.status) {
-        case 403:
-          if (data.error.includes("network")) {
-            setErrorMessage("มีการกดไลค์นโยบายนี้จากเครือข่ายนี้แล้ว");
-          } else if (data.error.includes("Suspicious")) {
-            setErrorMessage("ตรวจพบการใช้งานที่ผิดปกติ กรุณาลองใหม่ในภายหลัง");
-          } else {
-            setErrorMessage("ไม่สามารถกดไลก์ได้ในขณะนี้");
-          }
-          break;
-        case 429:
-          setErrorMessage("กดไลก์บ่อยเกินไป กรุณารอสักครู่");
-          break;
-        default:
-          setErrorMessage("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
-      }
+    if (!fingerprint) {
+      setErrorMessage("ระบบกำลังโหลด กรุณารอสักครู่");
       return;
     }
 
-    const newCount = Number(data.like) || 0;
-    const action = data.action;
+    if (isLiking[pid]) {
+      console.warn("⚠️ กำลังประมวลผลอยู่");
+      return;
+    }
 
-    setLikesMap(prev => ({ ...prev, [pid]: newCount }));
-    setLikedState(prev => ({ ...prev, [pid]: action === "liked" }));
+    setIsLiking(prev => ({ ...prev, [pid]: true }));
+    setErrorMessage("");
 
-    console.log(`✅ ${action} policy ${pid}, new count: ${newCount}`);
-  } catch (error) {
-    console.error("❌ handleLike error:", error);
-    setErrorMessage("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
-  } finally {
-    console.log("🧹 Reset isLiking for:", pid);
-    setIsLiking(prev => ({ ...prev, [pid]: false }));
+    try {
+      const res = await fetch("/api/policylike", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: pid, fingerprint }),
+      });
 
-    setTimeout(() => {
-      setErrorMessage("");
-    }, 5000);
-  }
-};
+      const data = await res.json();
+
+      if (!res.ok) {
+        switch (res.status) {
+          case 403:
+            if (data.error.includes("network")) {
+              setErrorMessage("มีการกดไลค์นโยบายนี้จากเครือข่ายนี้แล้ว");
+            } else if (data.error.includes("Suspicious")) {
+              setErrorMessage("ตรวจพบการใช้งานที่ผิดปกติ กรุณาลองใหม่ในภายหลัง");
+            } else {
+              setErrorMessage("ไม่สามารถกดไลก์ได้ในขณะนี้");
+            }
+            break;
+          case 429:
+            setErrorMessage("กดไลก์บ่อยเกินไป กรุณารอสักครู่");
+            break;
+          default:
+            setErrorMessage("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
+        }
+        return;
+      }
+
+      const newCount = Number(data.like) || 0;
+      const action = data.action;
+
+      setLikesMap(prev => ({ ...prev, [pid.toString()]: newCount }));
+      setLikedState(prev => ({ ...prev, [pid.toString()]: action === "liked" }));
+
+
+      console.log(`✅ ${action} policy ${pid}, new count: ${newCount}`);
+    } catch (error) {
+      console.error("❌ handleLike error:", error);
+      setErrorMessage("เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      console.log("🧹 Reset isLiking for:", pid);
+      setIsLiking(prev => ({ ...prev, [pid]: false }));
+
+      setTimeout(() => {
+        setErrorMessage("");
+      }, 5000);
+    }
+  };
 
 
   // ดึงรายชื่อพรรค
@@ -423,7 +426,7 @@ const PolicyPage = () => {
 
                   return (
                     <div
-                      key={policy.uniqueKey}
+                      key={policy.policyId}
                       className="bg-white rounded-2xl p-5 shadow-lg relative hover:shadow-xl transition duration-300 flex flex-col justify-between cursor-pointer"
                       onClick={() => router.push(`/policydetail/${policy.policyId}`)}
                     >
@@ -460,6 +463,7 @@ const PolicyPage = () => {
                           count={likesMap[policy.policyId] || 0}
                           onLike={handleLike}
                         />
+
 
 
 

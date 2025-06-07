@@ -24,6 +24,7 @@ interface Party {
   name: string
 }
 
+
 const statuses = ["ทั้งหมด", "เริ่มนโยบาย", "วางแผน", "ตัดสินใจ", "ดำเนินการ", "ประเมินผล"];
 
 const PolicyCategoryNamePage = () => {
@@ -43,28 +44,10 @@ const PolicyCategoryNamePage = () => {
   const [error, setError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
+  
+
   // Enhanced fingerprint loading with error handling
-  useEffect(() => {
-    const loadFingerprint = async () => {
-      try {
-        const fp = await FingerprintJS.load();
-        const result = await fp.get();
-        console.log("📌 Fingerprint loaded:", result.visitorId);
-        setFingerprint(result.visitorId);
-      } catch (error) {
-        console.error("❌ Error loading fingerprint:", error);
-        // Fallback to a basic browser fingerprint
-        const fallbackFingerprint = btoa(
-          navigator.userAgent +
-          screen.width +
-          screen.height +
-          new Date().getTimezoneOffset()
-        ).substring(0, 16);
-        setFingerprint(fallbackFingerprint);
-      }
-    };
-    loadFingerprint();
-  }, []);
+  
 
   const fetchPolicies = async () => {
     setLoading(true);
@@ -141,46 +124,105 @@ const PolicyCategoryNamePage = () => {
     fetchPolicies();
   }, [category, selectedParty, selectedStatus]);
 
-  // Enhanced like state initialization - same as main policycategory page
-  useEffect(() => {
-    if (policies.length === 0 || !fingerprint) return;
+  // 1) โหลด fingerprint แค่ครั้งเดียวตอน mount
+useEffect(() => {
+  const loadFingerprint = async () => {
+    try {
+      const fp = await FingerprintJS.load();
+      const result = await fp.get();
+      console.log("📌 Fingerprint loaded:", result.visitorId);
+      setFingerprint(result.visitorId);
+    } catch (error) {
+      console.error("❌ Error loading fingerprint:", error);
+      const fallback = btoa(navigator.userAgent + screen.width + screen.height + new Date().getTimezoneOffset()).substring(0, 16);
+      setFingerprint(fallback);
+    }
+  };
+  loadFingerprint();
+}, []);
 
-    const fetchLikeStates = async () => {
-      const promises = policies.map(async (p) => {
-        try {
-          const res = await fetch(`/api/policylike?id=${p.policyId}&fingerprint=${fingerprint}`);
-          if (!res.ok) {
-            console.warn(`Failed to fetch like state for policy ${p.policyId}`);
-            return { policyId: p.policyId, count: 0, liked: false };
-          }
+// 2) เรียก fetchPolicies เมื่อ fingerprint พร้อม
+useEffect(() => {
+  if (!fingerprint) return;
 
-          const data = await res.json();
-          const count = Number(data.like) || 0;
-          const liked = Boolean(data.isLiked);
+  const fetchPolicies = async () => {
+    setLoading(true);
+    try {
+      const query = new URLSearchParams();
+      if (selectedParty !== "ทั้งหมด") query.append("party", selectedParty);
+      if (selectedStatus !== "ทั้งหมด") query.append("status", selectedStatus);
 
-          return { policyId: p.policyId, count, liked };
-        } catch (error) {
-          console.error(`Error fetching like state for policy ${p.policyId}:`, error);
-          return { policyId: p.policyId, count: 0, liked: false };
-        }
+      const res = await fetch(`/api/policycategory/${encodeURIComponent(category)}?${query.toString()}`);
+      if (!res.ok) throw new Error("ไม่สามารถโหลดนโยบายได้");
+
+      const data = await res.json();
+      const processed = data.map((p: any, idx: number) => {
+        const rawId = p.policyId;
+        let policyId = typeof rawId === "object" && rawId.low ? rawId.low : Number(rawId) || idx + 1;
+        return { ...p, policyId };
       });
 
-      const results = await Promise.all(promises);
+      setPolicies(processed);
+    } catch (err) {
+      console.error("❌ Fetch error:", err);
+      setPolicies([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const newLikesMap: Record<number, number> = {};
-      const newLikedState: Record<number, boolean> = {};
+  fetchPolicies();
+}, [fingerprint, category, selectedParty, selectedStatus]);
 
-      results.forEach(({ policyId, count, liked }) => {
-        newLikesMap[policyId] = count;
-        newLikedState[policyId] = liked;
-      });
 
-      setLikesMap(newLikesMap);
-      setLikedState(newLikedState);
-    };
 
-    fetchLikeStates();
-  }, [policies, fingerprint]);
+ 
+  // 3) ใช้ useEffect เดิมสำหรับ fetchLikeStates
+useEffect(() => {
+  if (!fingerprint || policies.length === 0) return;
+
+ const fetchLikeStates = async () => {
+  const newLikesMap: Record<number, number> = {};
+  const newLikedState: Record<number, boolean> = {};
+
+  const promises = policies.map(async (p) => {
+    const localLikeKey = `policy_like_${p.policyId}_${fingerprint}`;
+    const cachedLike = localStorage.getItem(localLikeKey);
+    let count = 0;
+    let liked = cachedLike === 'true';
+
+    try {
+      const res = await fetch(`/api/policylike?id=${p.policyId}&fingerprint=${fingerprint}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      count = Number(data.like) || 0;
+      liked = Boolean(data.isLiked);
+
+      // อัปเดต localStorage ด้วย
+      if (liked) {
+        localStorage.setItem(localLikeKey, 'true');
+      } else {
+        localStorage.removeItem(localLikeKey);
+      }
+
+    } catch {
+      console.warn(`⚠️ Error fetching like state for policy ${p.policyId}`);
+    }
+
+    newLikesMap[p.policyId] = count;
+    newLikedState[p.policyId] = liked;
+  });
+
+  await Promise.all(promises);
+  setLikesMap(newLikesMap);
+  setLikedState(newLikedState);
+};
+
+
+  fetchLikeStates();
+}, [fingerprint, JSON.stringify(policies)]);
+
+
 
   // Enhanced like handler with better error handling - same as main policycategory page
   const handleLike = async (policyId: number) => {

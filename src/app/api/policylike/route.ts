@@ -101,9 +101,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing policy id' }, { status: 400 });
   }
 
-  if (!(await checkRateLimit(ip, 'GET'))) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
+  // if (!(await checkRateLimit(ip, 'GET'))) {
+  //   return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  // }
 
   const session = driver.session();
   try {
@@ -149,6 +149,9 @@ export async function GET(request: Request) {
   }
 }
 
+
+
+
 // ✅ POST /api/policylike { id: number, fingerprint: string }
 export async function POST(request: Request) {
   const session = driver.session();
@@ -158,6 +161,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { id, fingerprint } = body as { id?: number; fingerprint?: string };
     const { ip, ua, timestamp } = getClientInfo(request);
+    
 
     if (typeof id !== 'number' || !fingerprint || typeof fingerprint !== 'string') {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
@@ -240,6 +244,15 @@ export async function POST(request: Request) {
     } else {
       await transaction.run(
         `
+  MATCH (f1:Fingerprint)-[r:LIKED]->(p:Policy {id: $pid})
+  WHERE f1.ip = $ip AND f1.id <> $fp
+  DELETE r
+  `,
+        { pid: neo4j.int(id), ip, fp: fingerprint }
+      );
+
+      await transaction.run(
+        `
         MERGE (f:Fingerprint { id: $fp })
         ON CREATE SET f.createdAt = datetime(), f.likeCount = 0
         MERGE (p:Policy { id: $pid })
@@ -276,18 +289,27 @@ export async function POST(request: Request) {
 
     await transaction.commit();
 
-    const result = await session.run(
-      `MATCH (p:Policy { id: $pid }) RETURN p.like AS like`,
-      { pid: neo4j.int(id) }
-    );
+// ✅ ดึงจำนวน like จริงๆ จากความสัมพันธ์
+const result = await session.run(
+  `
+  MATCH (p:Policy {id: $pid})
+  OPTIONAL MATCH (:Fingerprint)-[r:LIKED]->(p)
+  WITH p, count(r) AS realLike
+  SET p.like = realLike
+  RETURN p.like AS like
+  `,
+  { pid: neo4j.int(id) }
+);
 
-    const raw = result.records[0].get('like');
-    const newCount = isInt(raw) ? raw.toNumber() : (raw as number) || 0;
+const raw = result.records[0].get('like');
+const newCount = isInt(raw) ? raw.toNumber() : (raw as number) || 0;
 
-    return NextResponse.json({
-      like: newCount,
-      action: hasLiked ? 'unliked' : 'liked'
-    });
+// ✅ ส่งกลับไปให้ frontend
+return NextResponse.json({
+  like: newCount,
+  action: hasLiked ? 'unliked' : 'liked'
+});
+
 
   } catch (err) {
     console.error("❌ /api/policylike error:", err);

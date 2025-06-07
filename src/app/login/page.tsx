@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,20 +31,21 @@ export default function LoginPage() {
       const { role, partyName, partyId } = userDoc.data();
 
       localStorage.setItem("role", role);
-    if (role === "pr") {
-      localStorage.setItem("partyName", partyName);
-      localStorage.setItem("partyId", String(partyId));
-      router.push("/pr");
+      if (role === "pr") {
+        localStorage.setItem("partyName", partyName);
+        localStorage.setItem("partyId", String(partyId));
+        router.push("/pr");
 
-    } else if (role === "admin") {
-      router.push("/admin");
+      } else if (role === "admin") {
+        router.push("/admin");
 
-    } else {
-      setErrorMsg("❌ คุณไม่มีสิทธิ์เข้าถึงหน้านี้");
-    }
+      } else {
+        setErrorMsg("❌ คุณไม่มีสิทธิ์เข้าถึงหน้านี้");
+      }
     } catch (error: any) {
-      console.error("Login error:", error.message);
-      setErrorMsg("เข้าสู่ระบบไม่สำเร็จ: " + error.message);
+      console.warn("⚠️ Login failed:", error.code);
+      setErrorMsg("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+
     }
   };
 

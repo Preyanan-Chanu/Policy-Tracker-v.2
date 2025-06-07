@@ -52,6 +52,7 @@ export async function GET(
         relatedProjects: relatedProjects,
         party: CASE
           WHEN party IS NOT NULL THEN {
+          id: toString(party.id),
             name: party.name,
             description: party.description,
             link: party.link
